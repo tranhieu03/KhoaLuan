@@ -4,18 +4,22 @@ using Microsoft.EntityFrameworkCore;
 
 namespace KhoaLuan1.Models;
 
-public partial class KhoaLuantestContext : DbContext
+public partial class KhoaluantestContext : DbContext
 {
-    public KhoaLuantestContext()
+    public KhoaluantestContext()
     {
     }
 
-    public KhoaLuantestContext(DbContextOptions<KhoaLuantestContext> options)
+    public KhoaluantestContext(DbContextOptions<KhoaluantestContext> options)
         : base(options)
     {
     }
 
     public virtual DbSet<CartItem> CartItems { get; set; }
+
+    public virtual DbSet<Driver> Drivers { get; set; }
+
+    public virtual DbSet<FoodCategory> FoodCategories { get; set; }
 
     public virtual DbSet<Message> Messages { get; set; }
 
@@ -35,6 +39,10 @@ public partial class KhoaLuantestContext : DbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<Voucher> Vouchers { get; set; }
+
+    public virtual DbSet<VoucherCategory> VoucherCategories { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Name=DefaultConnection");
 
@@ -53,6 +61,46 @@ public partial class KhoaLuantestContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__CartItems__UserI__31B762FC");
+        });
+
+        modelBuilder.Entity<Driver>(entity =>
+        {
+            entity.HasKey(e => e.DriverId).HasName("PK__Driver__F1B1CD04FBFCBA7D");
+
+            entity.ToTable("Driver");
+
+            entity.HasIndex(e => e.LicensePlate, "IDX_Driver_LicensePlate");
+
+            entity.HasIndex(e => e.UserId, "IDX_Driver_UserId");
+
+            entity.HasIndex(e => e.UserId, "UQ__Driver__1788CC4D0B1D8980").IsUnique();
+
+            entity.Property(e => e.BackIdCardImage).HasMaxLength(255);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
+            entity.Property(e => e.Hometown).HasMaxLength(100);
+            entity.Property(e => e.LicensePlate).HasMaxLength(20);
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .HasDefaultValue("Pending");
+
+            entity.HasOne(d => d.User).WithOne(p => p.Driver)
+                .HasForeignKey<Driver>(d => d.UserId)
+                .HasConstraintName("FK_Driver_User");
+        });
+
+        modelBuilder.Entity<FoodCategory>(entity =>
+        {
+            entity.HasKey(e => e.FoodCategoryId).HasName("PK__FoodCate__5451B7EBD7BD6067");
+
+            entity.ToTable("FoodCategory");
+
+            entity.HasIndex(e => e.Name, "UQ__FoodCate__737584F62C597F9E").IsUnique();
+
+            entity.Property(e => e.Description).HasMaxLength(255);
+            entity.Property(e => e.Name).HasMaxLength(100);
         });
 
         modelBuilder.Entity<Message>(entity =>
@@ -98,6 +146,8 @@ public partial class KhoaLuantestContext : DbContext
             entity.HasKey(e => e.OrderId).HasName("PK__Orders__C3905BCF75D28AB0");
 
             entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.Latitude).HasColumnType("decimal(10, 6)");
+            entity.Property(e => e.Longitude).HasColumnType("decimal(10, 6)");
             entity.Property(e => e.OrderDate)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
@@ -142,14 +192,24 @@ public partial class KhoaLuantestContext : DbContext
 
         modelBuilder.Entity<PasswordResetToken>(entity =>
         {
-            entity.HasKey(e => e.Id).HasName("PK__Password__3214EC071F74AADC");
+            entity.HasKey(e => e.TokenId).HasName("PK__Password__658FEEEA1D62C6F4");
 
-            entity.Property(e => e.ExpiryTime).HasColumnType("datetime");
-            entity.Property(e => e.Token).HasMaxLength(10);
+            entity.ToTable("PasswordResetToken");
+
+            entity.HasIndex(e => e.Token, "IDX_PasswordResetToken_Token");
+
+            entity.HasIndex(e => e.UserId, "IDX_PasswordResetToken_UserId");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+            entity.Property(e => e.Expiration).HasColumnType("datetime");
+            entity.Property(e => e.IsUsed).HasDefaultValue(false);
+            entity.Property(e => e.Token).HasMaxLength(255);
 
             entity.HasOne(d => d.User).WithMany(p => p.PasswordResetTokens)
                 .HasForeignKey(d => d.UserId)
-                .HasConstraintName("FK__PasswordR__UserI__625A9A57");
+                .HasConstraintName("FK_PasswordResetToken_User");
         });
 
         modelBuilder.Entity<Product>(entity =>
@@ -159,7 +219,16 @@ public partial class KhoaLuantestContext : DbContext
             entity.Property(e => e.ImageUrl).HasMaxLength(255);
             entity.Property(e => e.Name).HasMaxLength(100);
             entity.Property(e => e.Price).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("Active");
             entity.Property(e => e.StockQuantity).HasDefaultValue(0);
+
+            entity.HasOne(d => d.FoodCategory).WithMany(p => p.Products)
+                .HasForeignKey(d => d.FoodCategoryId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Product_FoodCategory");
 
             entity.HasOne(d => d.Restaurant).WithMany(p => p.Products)
                 .HasForeignKey(d => d.RestaurantId)
@@ -172,7 +241,17 @@ public partial class KhoaLuantestContext : DbContext
             entity.HasKey(e => e.RestaurantId).HasName("PK__Restaura__87454C9535ADCB92");
 
             entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.BackIdCardImage).HasMaxLength(255);
+            entity.Property(e => e.BusinessLicenseImage).HasMaxLength(255);
+            entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
             entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.PhoneNumber)
+                .HasMaxLength(15)
+                .IsUnicode(false);
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("Pending");
 
             entity.HasOne(d => d.Seller).WithMany(p => p.Restaurants)
                 .HasForeignKey(d => d.SellerId)
@@ -215,6 +294,58 @@ public partial class KhoaLuantestContext : DbContext
                 .HasMaxLength(10)
                 .IsFixedLength();
             entity.Property(e => e.Role).HasMaxLength(50);
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .HasDefaultValue("Active");
+        });
+
+        modelBuilder.Entity<Voucher>(entity =>
+        {
+            entity.HasKey(e => e.VoucherId).HasName("PK__Voucher__3AEE792171DFF232");
+
+            entity.ToTable("Voucher");
+
+            entity.HasIndex(e => e.Code, "UQ__Voucher__A25C5AA703693E01").IsUnique();
+
+            entity.Property(e => e.Code).HasMaxLength(50);
+            entity.Property(e => e.DiscountAmount).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.ExpirationDate).HasColumnType("datetime");
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .HasDefaultValue("Active");
+            entity.Property(e => e.VoucherType).HasMaxLength(50);
+
+            entity.HasOne(d => d.Product).WithMany(p => p.Vouchers)
+                .HasForeignKey(d => d.ProductId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Voucher_Product");
+
+            entity.HasOne(d => d.Restaurant).WithMany(p => p.Vouchers)
+                .HasForeignKey(d => d.RestaurantId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Voucher_Restaurant");
+
+            entity.HasOne(d => d.User).WithMany(p => p.Vouchers)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Voucher_User");
+
+            entity.HasOne(d => d.VoucherCategory).WithMany(p => p.Vouchers)
+                .HasForeignKey(d => d.VoucherCategoryId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_Voucher_VoucherCategory");
+        });
+
+        modelBuilder.Entity<VoucherCategory>(entity =>
+        {
+            entity.HasKey(e => e.VoucherCategoryId).HasName("PK__VoucherC__9EED8AF5F1CF6E4A");
+
+            entity.ToTable("VoucherCategory");
+
+            entity.HasIndex(e => e.Name, "UQ__VoucherC__737584F60BE822FC").IsUnique();
+
+            entity.Property(e => e.Description).HasMaxLength(255);
+            entity.Property(e => e.Name).HasMaxLength(100);
         });
 
         OnModelCreatingPartial(modelBuilder);

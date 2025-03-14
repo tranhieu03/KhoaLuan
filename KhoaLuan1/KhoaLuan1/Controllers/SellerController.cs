@@ -9,12 +9,13 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class SellerController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
-        public SellerController(KhoaLuantestContext context)
+        private readonly KhoaluantestContext _context;
+        public SellerController(KhoaluantestContext context)
         {
             _context = context;
         }
-
+         
+        //API xem tất cả đơn hàng của nhà hàng(Tất cả trạng thái)
 
         [HttpGet("seller-orders")]
         public async Task<IActionResult> GetSellerOrders()

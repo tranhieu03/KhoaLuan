@@ -9,12 +9,17 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class AdminController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
+        private readonly EmailService _emailService;
 
-        public AdminController(KhoaLuantestContext context)
+        public AdminController(KhoaluantestContext context, EmailService emailService)
         {
             _context = context;
+            _emailService= emailService;
         }
+
+
+        // 1. Xem toàn bộ tài khoản
         [HttpGet("users")]
         public async Task<ActionResult<IEnumerable<User>>> GetUsers()
         {
@@ -178,28 +183,55 @@ namespace KhoaLuan1.Controllers
             return NoContent();
         }
 
-        // 4. Xóa đơn hàng
-        [HttpDelete("orders/{id}")]
-        public async Task<IActionResult> DeleteOrder(int id)
+
+        //===========================Quản lý nhà hàng========================
+        // chấp nhận hoặc từ chối nhà hàng
+        [HttpPost("approve/{restaurantId}")]
+        public async Task<IActionResult> ApproveRestaurant(int restaurantId)
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+            var email = HttpContext.Session.GetString("Email");
+            var restaurant = await _context.Restaurants.FindAsync(restaurantId);
+            if (restaurant == null) return NotFound(new { message = "Restaurant not found." });
 
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "Admin")
-                return BadRequest(new { message = "Only Admin is permitted" });
-            var order = await _context.Orders.FindAsync(id);
-            if (order == null)
-            {
-                return NotFound("Order not found!");
-            }
-
-            _context.Orders.Remove(order);
+            restaurant.Status = "Approved";
             await _context.SaveChangesAsync();
 
-            return NoContent();
+            var emailBody = $@"
+        <h2>Congratulations!</h2>
+        <p>Your restaurant <strong>{restaurant.Name}</strong> has been approved.</p>
+        <p>Address: {restaurant.Address}</p>
+        <p>Phone: {restaurant.PhoneNumber}</p>";
+
+            await _emailService.SendEmailAsync(email, "Restaurant Approved", emailBody);
+
+            return Ok(new { message = "Restaurant approved and email sent." });
         }
+
+        [HttpPost("reject/{restaurantId}")]
+        public async Task<IActionResult> RejectRestaurant(int restaurantId, [FromBody] RejectRestaurantRequest model)
+        {
+            var email = HttpContext.Session.GetString("Email");
+            var restaurant = await _context.Restaurants.FindAsync(restaurantId);
+            if (restaurant == null) return NotFound(new { message = "Restaurant not found." });
+
+            restaurant.Status = "Rejected";
+            await _context.SaveChangesAsync();
+
+            var emailBody = $@"
+        <h2>Unfortunately, Your Restaurant Was Not Approved</h2>
+        <p>We regret to inform you that your restaurant <strong>{restaurant.Name}</strong> was not approved.</p>
+        <p>Reason: {model.Reason}</p>";
+
+            await _emailService.SendEmailAsync(email, "Restaurant Rejected", emailBody);
+
+            return Ok(new { message = "Restaurant rejected and email sent." });
+        }
+
+       //================quản lý món ăn=========================
+
+    }
+    public class RejectRestaurantRequest
+    {
+        public string Reason { get; set; }
     }
 }

@@ -9,12 +9,16 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class DeliveryController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
 
-        public DeliveryController (KhoaLuantestContext context)
+        public DeliveryController (KhoaluantestContext context)
         {
             _context = context;
         }
+
+
+
+        //API XEm danh sách đơn hàng đang cần được giao
 
         [HttpGet("available-orders")]
         public async Task<IActionResult> GetAvailableOrders()

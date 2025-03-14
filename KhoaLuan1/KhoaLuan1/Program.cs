@@ -10,7 +10,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<EmailService>();
-
+builder.Services.AddSingleton<MapService>();
 builder.Services.AddHttpClient<IMoMoService, MoMoService>();
 builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.Configure<MoMoOptionModel>(builder.Configuration.GetSection("MomoAPI"));
@@ -19,7 +19,7 @@ builder.Services.AddHttpContextAccessor();
 
 
 // Add DbContext
-builder.Services.AddDbContext<KhoaLuan1.Models.KhoaLuantestContext>(options =>
+builder.Services.AddDbContext<KhoaLuan1.Models.KhoaluantestContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add In-Memory Cache and Session

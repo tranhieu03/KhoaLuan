@@ -25,7 +25,7 @@ public class EmailService
             var smtpPort = int.Parse(emailSettings["SmtpPort"]);
 
             var email = new MimeMessage();
-            email.From.Add(new MailboxAddress("Admin", senderEmail));
+            email.From.Add(new MailboxAddress("HH FOOD", senderEmail));
             email.To.Add(new MailboxAddress("", toEmail));
             email.Subject = subject;
             email.Body = new TextPart("html") { Text = message };

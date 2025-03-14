@@ -12,19 +12,15 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class ReportsController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
         private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public ReportsController(KhoaLuantestContext context, IHttpContextAccessor httpContextAccessor)
+        public ReportsController(KhoaluantestContext context, IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _httpContextAccessor = httpContextAccessor;
         }
 
-        private int? GetUserIdFromSession()
-        {
-            return _httpContextAccessor.HttpContext.Session.GetInt32("UserId");
-        }
 
         private bool IsValidFilterType(string filterType)
         {

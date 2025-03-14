@@ -9,12 +9,15 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class CustomerController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
 
-        public CustomerController(KhoaLuantestContext context)
+        public CustomerController(KhoaluantestContext context)
         {
             _context = context;
         }
+
+
+        //API Xem toàn bộ danh sách món ăn
         [HttpGet("all-products")]
         public async Task<IActionResult> GetAllProducts(int page = 1, int pageSize = 10)
         {
@@ -56,7 +59,7 @@ namespace KhoaLuan1.Controllers
         }
 
 
-
+        //API Xem chi tiết cửa hàng
 
         [HttpGet("products-by-restaurant/{restaurantId}")]
         public async Task<IActionResult> GetProductsByRestaurant(int restaurantId)
@@ -92,6 +95,12 @@ namespace KhoaLuan1.Controllers
 
             return Ok(products);
         }
+
+
+
+
+        //API Xem danh sách các order của từng khách hàng
+
         [HttpGet("my-orders")]
         public async Task<IActionResult> GetUserOrders()
         {

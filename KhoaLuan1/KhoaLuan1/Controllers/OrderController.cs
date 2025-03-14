@@ -12,13 +12,13 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class OrderController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly IVnPayService _vnPayService;
 
         private readonly IMoMoService _moMoService;
 
-        public OrderController(KhoaLuantestContext context, IHubContext<NotificationHub> hubContext, IMoMoService moMoService, IVnPayService vnPayService)
+        public OrderController(KhoaluantestContext context, IHubContext<NotificationHub> hubContext, IMoMoService moMoService, IVnPayService vnPayService)
         {
             _context = context;
             _hubContext = hubContext;
@@ -26,6 +26,10 @@ namespace KhoaLuan1.Controllers
             _moMoService = moMoService;
             _vnPayService = vnPayService;
         }
+
+
+
+        //API tạo đơn hàng từ giỏ hàng
 
         [HttpPost("create-order")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
@@ -170,7 +174,7 @@ namespace KhoaLuan1.Controllers
 
 
 
-
+        //API nhà hàng xác nhận đơn hàng
 
         [HttpPost("confirm-order/{orderId}")]
         public async Task<IActionResult> ConfirmOrder(int orderId)
@@ -237,6 +241,8 @@ namespace KhoaLuan1.Controllers
 
 
 
+        //API người giao hàng nhận đơn(chuyển trạng thái đơn)
+
         [HttpPost("accept-delivery/{orderId}")]
         public async Task<IActionResult> AcceptDelivery(int orderId)
         {
@@ -284,6 +290,10 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Bạn đã nhận đơn hàng thành công." });
         }
 
+
+
+
+        //API Xem các đơn hàng đang giao hoặc đã giao của từng nhà hàng, tài xế, khách hàng
 
         [HttpGet("delivery-orders")]
         public async Task<IActionResult> GetDeliveryOrders()

@@ -9,12 +9,14 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class CartController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
 
-        public CartController(KhoaLuantestContext context)
+        public CartController(KhoaluantestContext context)
         {
             _context = context;
         }
+
+        //API Danh sách sản phẩm trong giỏ hàng
         [HttpGet("Cart_items")]
         public async Task<IActionResult> GetCartItems()
         {
@@ -54,6 +56,8 @@ namespace KhoaLuan1.Controllers
             });
         }
 
+
+        //API Thêm sản phẩm vào giỏ hàng
 
         [HttpPost("Cart_add")]
         public async Task<IActionResult> AddToCart([FromBody] AddToCartRequest request)
@@ -95,6 +99,8 @@ namespace KhoaLuan1.Controllers
 
             return Ok(new { message = "Product added to cart successfully." });
         }
+
+        //API Xóa sản phẩm khỏi giỏ hàng
 
         [HttpDelete("remove/{cartItemId}")]
         public async Task<IActionResult> RemoveFromCart(int cartItemId)

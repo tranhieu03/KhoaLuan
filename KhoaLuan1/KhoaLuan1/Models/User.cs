@@ -19,7 +19,11 @@ public partial class User
 
     public string? PhoneNumber { get; set; }
 
+    public string Status { get; set; } = null!;
+
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
+
+    public virtual Driver? Driver { get; set; }
 
     public virtual ICollection<Message> MessageReceivers { get; set; } = new List<Message>();
 
@@ -36,4 +40,6 @@ public partial class User
     public virtual ICollection<Restaurant> Restaurants { get; set; } = new List<Restaurant>();
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    public virtual ICollection<Voucher> Vouchers { get; set; } = new List<Voucher>();
 }

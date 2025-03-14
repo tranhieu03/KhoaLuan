@@ -9,12 +9,14 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class NotificationController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
 
-        public NotificationController(KhoaLuantestContext context)
+        public NotificationController(KhoaluantestContext context)
         {
             _context = context;
         }
+
+        //API lấy thông báo của từng người dùng
 
         [HttpGet("get-notifications")]
         public async Task<IActionResult> GetNotifications()
@@ -32,6 +34,9 @@ namespace KhoaLuan1.Controllers
 
             return Ok(notifications);
         }
+
+
+        //Đánh dấu là đã đọc
 
         [HttpPut("mark-all-read")]
         public async Task<IActionResult> MarkAllAsRead()
@@ -59,6 +64,10 @@ namespace KhoaLuan1.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { message = "Tất cả thông báo đã được đánh dấu là đã đọc." });
         }
+
+        //đọc thông báo
+
+
         [HttpPost("mark-as-read")]
         public async Task<IActionResult> MarkNotificationsAsRead()
         {

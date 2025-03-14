@@ -17,9 +17,21 @@ public partial class Restaurant
 
     public double? Longitude { get; set; }
 
+    public string? FrontIdCardImage { get; set; }
+
+    public string? BackIdCardImage { get; set; }
+
+    public string? BusinessLicenseImage { get; set; }
+
+    public string? PhoneNumber { get; set; }
+
+    public string Status { get; set; } = null!;
+
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 
     public virtual ICollection<Product> Products { get; set; } = new List<Product>();
 
     public virtual User Seller { get; set; } = null!;
+
+    public virtual ICollection<Voucher> Vouchers { get; set; } = new List<Voucher>();
 }

@@ -9,9 +9,9 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class ProductController : ControllerBase
     {
-        private readonly KhoaLuantestContext _context;
+        private readonly KhoaluantestContext _context;
 
-        public ProductController(KhoaLuantestContext context)
+        public ProductController(KhoaluantestContext context)
         {
             _context = context;
         }
@@ -51,6 +51,9 @@ namespace KhoaLuan1.Controllers
 
             return Ok(new { message = "Product created successfully.", productId = product.ProductId });
         }
+
+
+        //API xem danh sách sản phẩm cửa hàng đã đăng
         [HttpGet("listsanphamcuahang")]
         public async Task<IActionResult> ListProductRes()
         {

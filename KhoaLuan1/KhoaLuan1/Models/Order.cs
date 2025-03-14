@@ -25,6 +25,10 @@ public partial class Order
 
     public string? PaymentStatus { get; set; }
 
+    public decimal? Latitude { get; set; }
+
+    public decimal? Longitude { get; set; }
+
     public virtual User? DeliveryPerson { get; set; }
 
     public virtual ICollection<Message> Messages { get; set; } = new List<Message>();

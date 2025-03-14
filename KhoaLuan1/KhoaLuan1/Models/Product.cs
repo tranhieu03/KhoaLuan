@@ -19,9 +19,17 @@ public partial class Product
 
     public int? StockQuantity { get; set; }
 
+    public string Status { get; set; } = null!;
+
+    public int? FoodCategoryId { get; set; }
+
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
+
+    public virtual FoodCategory? FoodCategory { get; set; }
 
     public virtual ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
 
     public virtual Restaurant Restaurant { get; set; } = null!;
+
+    public virtual ICollection<Voucher> Vouchers { get; set; } = new List<Voucher>();
 }

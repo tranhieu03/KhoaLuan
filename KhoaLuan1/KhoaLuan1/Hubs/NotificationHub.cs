@@ -32,7 +32,7 @@ public class NotificationHub : Hub
                 return;
             }
 
-            using (var context = new KhoaLuantestContext())
+            using (var context = new KhoaluantestContext())
             {
                 if (role == "seller")
                 {
@@ -71,7 +71,7 @@ public class NotificationHub : Hub
                 return;
             }
 
-            using (var context = new KhoaLuantestContext())
+            using (var context = new KhoaluantestContext())
             {
                 if (role == "seller")
                 {
