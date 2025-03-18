@@ -1,0 +1,189 @@
+.hero-section {
+  position: relative;
+}
+.overlay {
+  width: 100%;
+  height: 400px;
+  object-fit: cover; /* Đảm bảo ảnh không bị méo */
+  display: block;
+}
+.container {
+  width: 100%;
+  padding: 0 15px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap; /* Cho phép xuống dòng khi không đủ chỗ */
+  justify-content: center;
+}
+
+.food-card {
+  border-radius: 10px;
+  overflow: hidden;
+  transition: 0.3s;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.food-card img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.promo-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: var(--accent-color);
+  color: white;
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-grow: 1;
+  padding: 15px;
+}
+
+.rating {
+  color: #ffd700;
+}
+
+.distance-time {
+  font-size: 14px;
+  color: gray;
+}
+
+/* Điều chỉnh layout theo kích thước màn hình */
+.col-md-3 {
+  padding: 10px;
+}
+
+/* Trên màn hình lớn (>=1200px) */
+@media (min-width: 1200px) {
+  .col-md-3 {
+    flex: 0 0 23%;
+    max-width: 23%;
+  }
+}
+
+/* Trên màn hình trung bình (>=768px và <1200px) */
+@media (max-width: 1199px) and (min-width: 768px) {
+  .col-md-3 {
+    flex: 0 0 48%;
+    max-width: 48%;
+  }
+}
+
+/* Trên màn hình nhỏ (dưới 768px) */
+@media (max-width: 767px) {
+  .col-md-3 {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+}
+
+// -------------------------
+/* ------- */
+.category-card {
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.3s;
+}
+
+.category-card img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.category-card:hover {
+  transform: scale(1.05);
+}
+
+.category-name {
+  margin-top: 8px;
+  font-weight: bold;
+}
+
+.accordion {
+  width: 90%;
+  max-width: 1000px; /* Mở rộng hơn */
+  margin: auto;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.accordion-item {
+  border-bottom: 1px solid #ddd;
+}
+
+.accordion-header {
+  background: #f8f9fa;
+  padding: 18px 24px; /* Tăng padding cho đẹp hơn */
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.accordion-title {
+  display: flex;
+  align-items: center;
+}
+
+.accordion-collapse {
+  padding: 18px 24px; /* Đồng bộ với tiêu đề */
+  background: #fff;
+  font-size: 18px;
+  color: #555;
+  line-height: 1.6;
+}
+
+.accordion-item:last-child {
+  border-bottom: none;
+}
+
+/* Hiệu ứng hover */
+.accordion-header:hover {
+  background-color: #4d8ef7;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .accordion {
+    width: 95%;
+    max-width: 800px;
+  }
+
+  .accordion-header,
+  .accordion-collapse {
+    font-size: 18px;
+    padding: 16px 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .accordion {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .accordion-header,
+  .accordion-collapse {
+    font-size: 16px;
+    padding: 12px 15px;
+  }
+}
