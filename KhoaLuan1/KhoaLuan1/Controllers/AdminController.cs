@@ -227,11 +227,55 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Restaurant rejected and email sent." });
         }
 
-       //================quản lý món ăn=========================
+        //================quản lý món ăn=========================
+
+        //================Quản lý voucher========================
+
+        //API thêm voucher
+// có 2 voucher type là fixed và percentage tương ứng với giảm giá trực tiếp và giảm giá theo phần trăm
+        [HttpPost("add-voucher")]
+        public IActionResult AddVoucher([FromBody] VoucherDto model)
+        {
+            if (model == null || string.IsNullOrEmpty(model.Code))
+            {
+                return BadRequest("Dữ liệu không hợp lệ");
+            }
+
+            var voucher = new Voucher
+            {
+                Code = model.Code,
+                DiscountAmount = model.DiscountAmount,
+                ExpirationDate = model.ExpirationDate,
+                Status = "Active",
+                VoucherType = model.VoucherType,
+                UserId = model.UserId,
+                ProductId = model.ProductId,
+                RestaurantId = model.RestaurantId,
+                VoucherCategoryId = model.VoucherCategoryId
+            };
+
+            _context.Vouchers.Add(voucher);
+            _context.SaveChanges();
+
+            return Ok(new { Message = "Thêm mã giảm giá thành công", VoucherId = voucher.VoucherId });
+        }
 
     }
     public class RejectRestaurantRequest
     {
         public string Reason { get; set; }
+    }
+
+
+    public class VoucherDto
+    {
+        public string Code { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public DateTime ExpirationDate { get; set; }
+        public string VoucherType { get; set; }
+        public int? UserId { get; set; } // Áp dụng cho User cụ thể
+        public int? ProductId { get; set; } // Áp dụng cho Món ăn
+        public int? RestaurantId { get; set; } // Áp dụng cho Nhà hàng
+        public int? VoucherCategoryId { get; set; } // Danh mục voucher
     }
 }

@@ -1,6 +1,9 @@
-﻿using KhoaLuan1.Service;
+﻿using KhoaLuan1.Models;
+using KhoaLuan1.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 
 namespace KhoaLuan1.Controllers
 {
@@ -8,12 +11,14 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class GoongController : ControllerBase
     {
+        private readonly KhoaluantestContext _context;
         private readonly HttpClient _httpClient;
         private readonly MapService _mapService;
         private const string ApiKey = "lvk0JwNwaf0IZdBqZeDZZS0YUfAsFl2prXSWVDkb"; // Thay bằng API Key của bạn
 
-        public GoongController(MapService mapService)
+        public GoongController(KhoaluantestContext context,MapService mapService)
         {
+            _context = context;
             _httpClient = new HttpClient();
             _mapService = mapService;
         }
@@ -64,11 +69,70 @@ namespace KhoaLuan1.Controllers
             }
         }
 
+        [HttpPost("distance2")]
+        public async Task<IActionResult> CalculateDistance2([FromBody] Caculate model)
+        {
+            var restaurant = await _context.Restaurants
+                .FirstOrDefaultAsync(r => r.RestaurantId == model.ResID);
+
+            if (restaurant == null)
+                return NotFound("Không tìm thấy nhà hàng!");
+
+            // Lấy tọa độ điểm đến từ địa chỉ
+            var (lat, lng) = await _mapService.GetCoordinates(model.End);
+
+            if (lat == 0 || lng == 0)
+                return BadRequest("Không thể lấy tọa độ của địa điểm đích!");
+
+            // Tính khoảng cách giữa hai điểm
+            double? distance = await _mapService.CalculateDistanceAsync(
+                (double)restaurant.Latitude, (double)restaurant.Longitude, lat, lng
+            );
+
+            if (distance == null)
+                return BadRequest("Không thể tính khoảng cách!");
+
+            return Ok(new { DistanceKm = distance.Value });
+        }
+
+
+
+
+
+
 
     }
     public class GeocodeRequest
     {
         public string Address { get; set; }
     }
+
+    public class Caculate
+    {
+        public int ResID { get; set; }
+        public string End { get; set; }
+    }
+    public class GoongGeocodeResponse
+    {
+        public List<Result> Results { get; set; }
+        public string Status { get; set; }
+    }
+
+    public class Result
+    {
+        public Geometry Geometry { get; set; }
+    }
+
+    public class Geometry
+    {
+        public Location Location { get; set; }
+    }
+
+    public class Location
+    {
+        public double Lat { get; set; }
+        public double Lng { get; set; }
+    }
+
 
 }

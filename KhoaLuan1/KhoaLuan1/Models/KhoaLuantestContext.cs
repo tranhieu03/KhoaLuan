@@ -17,8 +17,6 @@ public partial class KhoaluantestContext : DbContext
 
     public virtual DbSet<CartItem> CartItems { get; set; }
 
-    public virtual DbSet<Driver> Drivers { get; set; }
-
     public virtual DbSet<FoodCategory> FoodCategories { get; set; }
 
     public virtual DbSet<Message> Messages { get; set; }
@@ -61,34 +59,6 @@ public partial class KhoaluantestContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__CartItems__UserI__31B762FC");
-        });
-
-        modelBuilder.Entity<Driver>(entity =>
-        {
-            entity.HasKey(e => e.DriverId).HasName("PK__Driver__F1B1CD04FBFCBA7D");
-
-            entity.ToTable("Driver");
-
-            entity.HasIndex(e => e.LicensePlate, "IDX_Driver_LicensePlate");
-
-            entity.HasIndex(e => e.UserId, "IDX_Driver_UserId");
-
-            entity.HasIndex(e => e.UserId, "UQ__Driver__1788CC4D0B1D8980").IsUnique();
-
-            entity.Property(e => e.BackIdCardImage).HasMaxLength(255);
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
-                .HasColumnType("datetime");
-            entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
-            entity.Property(e => e.Hometown).HasMaxLength(100);
-            entity.Property(e => e.LicensePlate).HasMaxLength(20);
-            entity.Property(e => e.Status)
-                .HasMaxLength(50)
-                .HasDefaultValue("Pending");
-
-            entity.HasOne(d => d.User).WithOne(p => p.Driver)
-                .HasForeignKey<Driver>(d => d.UserId)
-                .HasConstraintName("FK_Driver_User");
         });
 
         modelBuilder.Entity<FoodCategory>(entity =>
@@ -146,6 +116,8 @@ public partial class KhoaluantestContext : DbContext
             entity.HasKey(e => e.OrderId).HasName("PK__Orders__C3905BCF75D28AB0");
 
             entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.DiscountAmount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.DistanceKm).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.Latitude).HasColumnType("decimal(10, 6)");
             entity.Property(e => e.Longitude).HasColumnType("decimal(10, 6)");
             entity.Property(e => e.OrderDate)
@@ -284,6 +256,7 @@ public partial class KhoaluantestContext : DbContext
 
             entity.HasIndex(e => e.Email, "UQ__Users__A9D10534468CC25F").IsUnique();
 
+            entity.Property(e => e.Address).HasMaxLength(255);
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");

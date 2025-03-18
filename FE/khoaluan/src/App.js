@@ -12,8 +12,7 @@ import DeliveryDashboard from "./components/DeliveryDashboard";
 import DeliveryOrder from "./components/DeliveryOrder";
 import CustomerOrder from "./components/CustomerOrder";
 import ForgotPassword from "./components/ForgotPassword";
-import TestRestaurant from "./components/TestRestaurants";
-import TestMap from "./components/TestMap";
+
 import AddressSearch from "./components/AddressSearch";
 
 function App() {
@@ -32,8 +31,7 @@ function App() {
         <Route path="/delivery/order" element={<DeliveryOrder />} />
         <Route path="/Customer/order" element={<CustomerOrder />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
-        <Route path="/test" element={<TestRestaurant />} />
-        <Route path="/testmap" element={<TestMap />} />
+
         <Route path="/address" element={<AddressSearch />} />
       </Routes>
     </Router>

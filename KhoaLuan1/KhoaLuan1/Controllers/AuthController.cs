@@ -153,6 +153,7 @@ namespace KhoaLuan1.Controllers
             var email = HttpContext.Session.GetString("Email");
             var role = HttpContext.Session.GetString("Role");
             var phoneNumber = HttpContext.Session.GetString("PhoneNumber");
+            
 
             return Ok(new
             {

@@ -21,9 +21,9 @@ public partial class User
 
     public string Status { get; set; } = null!;
 
-    public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
+    public string? Address { get; set; }
 
-    public virtual Driver? Driver { get; set; }
+    public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
 
     public virtual ICollection<Message> MessageReceivers { get; set; } = new List<Message>();
 

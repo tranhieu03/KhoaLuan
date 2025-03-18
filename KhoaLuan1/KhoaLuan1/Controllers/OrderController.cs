@@ -1,6 +1,7 @@
 ﻿using KhoaLuan1.Hubs;
 using KhoaLuan1.Models;
 using KhoaLuan1.Service;
+using MailKit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
@@ -15,22 +16,57 @@ namespace KhoaLuan1.Controllers
         private readonly KhoaluantestContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly IVnPayService _vnPayService;
+        private readonly MapService _mapService;
 
         private readonly IMoMoService _moMoService;
 
-        public OrderController(KhoaluantestContext context, IHubContext<NotificationHub> hubContext, IMoMoService moMoService, IVnPayService vnPayService)
+        public OrderController(KhoaluantestContext context, IHubContext<NotificationHub> hubContext,
+            IMoMoService moMoService, IVnPayService vnPayService, MapService mapService)
         {
             _context = context;
             _hubContext = hubContext;
             
             _moMoService = moMoService;
             _vnPayService = vnPayService;
+            _mapService = mapService;
+        }
+
+        // api danh sách voucher
+
+
+        [HttpGet("valid-vouchers")]
+        public async Task<IActionResult> GetValidVouchers()
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null)
+                return Unauthorized(new { message = "Not logged in." });
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null)
+                return NotFound(new { message = "User not found." });
+
+            var validVouchers = await _context.Vouchers
+                .Include(v => v.VoucherCategory)
+                .Where(v => v.Status == "Active" &&
+                    (v.VoucherCategory.Name == "User" && v.UserId == userId ||
+                     v.VoucherCategory.Name == "Restaurant" ||
+                     v.VoucherCategory.Name == "Product"))
+                .Select(v => new
+                {
+                    v.Code,
+                    v.VoucherCategory.Name,
+                    v.DiscountAmount,
+                    v.VoucherType,
+                    v.ExpirationDate
+                })
+                .ToListAsync();
+
+            return Ok(validVouchers);
         }
 
 
 
         //API tạo đơn hàng từ giỏ hàng
-
         [HttpPost("create-order")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
@@ -42,8 +78,9 @@ namespace KhoaLuan1.Controllers
             if (user == null)
                 return NotFound(new { message = "User not found." });
 
-            if (string.IsNullOrEmpty(request.Address))
-                return BadRequest(new { message = "Address is required." });
+            string deliveryAddress = string.IsNullOrEmpty(request.Address) ? user.Address : request.Address;
+            if (string.IsNullOrEmpty(deliveryAddress))
+                return BadRequest(new { message = "Address is required. Please provide an address or update your profile." });
 
             if (request.SelectedCartItems == null || !request.SelectedCartItems.Any())
                 return BadRequest(new { message = "No cart items selected." });
@@ -51,10 +88,21 @@ namespace KhoaLuan1.Controllers
             var cartItems = await _context.CartItems
                 .Where(c => c.UserId == userId && request.SelectedCartItems.Contains(c.CartItemId))
                 .Include(c => c.Product)
+                .ThenInclude(p => p.Restaurant)
                 .ToListAsync();
 
             if (!cartItems.Any())
                 return BadRequest(new { message = "Selected cart items not found or empty." });
+
+            double orderLat, orderLng;
+            try
+            {
+                (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = $"Không thể lấy tọa độ từ địa chỉ giao hàng: {ex.Message}" });
+            }
 
             var groupedByRestaurant = cartItems.GroupBy(c => c.Product.RestaurantId).ToList();
             var paymentOrders = new List<object>();
@@ -63,7 +111,74 @@ namespace KhoaLuan1.Controllers
             {
                 var restaurantId = group.Key;
                 var items = group.ToList();
-                decimal totalAmount = items.Sum(c => c.Quantity * c.Product.Price);
+
+                decimal productTotal = items.Sum(c => c.Quantity * c.Product.Price);
+
+                var restaurant = items.First().Product.Restaurant;
+                double restaurantLat = (double)restaurant.Latitude;
+                double restaurantLng = (double)restaurant.Longitude;
+
+                double? distanceKmNullable;
+                try
+                {
+                    distanceKmNullable = await _mapService.CalculateDistanceAsync(restaurantLat, restaurantLng, orderLat, orderLng);
+
+                    if (distanceKmNullable == null)
+                        return BadRequest(new { message = "Không thể tính khoảng cách đường đi!" });
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest(new { message = $"Không thể tính khoảng cách đường đi: {ex.Message}" });
+                }
+                double distanceKm = distanceKmNullable.Value;
+
+                decimal shippingFee = CalculateShippingFee(distanceKm);
+                decimal discountAmount = 0;
+                Voucher? appliedVoucher = null;
+
+                // Kiểm tra mã giảm giá
+                if (!string.IsNullOrEmpty(request.VoucherCode))
+                {
+                    appliedVoucher = await _context.Vouchers
+                        .Include(v => v.VoucherCategory)
+                        .FirstOrDefaultAsync(v => v.Code == request.VoucherCode && v.Status == "Active");
+
+                    if (appliedVoucher == null)
+                    {
+                        return BadRequest(new { message = "Mã giảm giá không hợp lệ hoặc đã hết hạn." });
+                    }
+
+                    // Xác định xem voucher có áp dụng cho đơn hàng không
+                    if (appliedVoucher.VoucherCategory.Name == "User" && appliedVoucher.UserId != userId)
+                    {
+                        return BadRequest(new { message = "Mã giảm giá này không thuộc về bạn." });
+                    }
+                    if (appliedVoucher.VoucherCategory.Name == "Restaurant" && appliedVoucher.RestaurantId != restaurantId)
+                    {
+                        return BadRequest(new { message = "Mã giảm giá này không áp dụng cho nhà hàng này." });
+                    }
+                    if (appliedVoucher.VoucherCategory.Name == "Product")
+                    {
+                        var validProduct = items.Any(i => i.ProductId == appliedVoucher.ProductId);
+                        if (!validProduct)
+                        {
+                            return BadRequest(new { message = "Mã giảm giá này không áp dụng cho các sản phẩm trong đơn hàng." });
+                        }
+                    }
+
+                    // Áp dụng giảm giá
+                    if (appliedVoucher.VoucherType == "Fixed")
+                    {
+                        discountAmount = appliedVoucher.DiscountAmount;
+                    }
+                    else if (appliedVoucher.VoucherType == "Percentage")
+                    {
+                        discountAmount = (productTotal * appliedVoucher.DiscountAmount) / 100;
+                    }
+                }
+
+                decimal totalAmount = productTotal + shippingFee - discountAmount;
+                if (totalAmount < 0) totalAmount = 0;
 
                 var order = new Order
                 {
@@ -72,9 +187,14 @@ namespace KhoaLuan1.Controllers
                     Status = "Pending",
                     OrderDate = DateTime.UtcNow,
                     TotalAmount = totalAmount,
-                    Address = request.Address,
-                    PaymentMethod = request.PaymentMethod, // "VNPay" hoặc "COD"
-                    PaymentStatus = request.PaymentMethod == "VNPay" ? "Paid" : "Unpaid"
+                    Address = deliveryAddress,
+                    Latitude = (decimal)orderLat,
+                    Longitude = (decimal)orderLng,
+                    PaymentMethod = request.PaymentMethod,
+                    PaymentStatus = request.PaymentMethod == "VNPay" ? "Paid" : "Unpaid",
+                    DistanceKm = (decimal)distanceKm,
+                    
+                    DiscountAmount = discountAmount
                 };
 
                 _context.Orders.Add(order);
@@ -92,44 +212,8 @@ namespace KhoaLuan1.Controllers
                 }
 
                 await _context.SaveChangesAsync();
-
-                if (request.PaymentMethod == "VNPay")
-                {
-                    // 🏦 Tạo URL thanh toán VNPay
-                    var paymentUrl = _vnPayService.CreatePaymentUrl(new PaymentInformationModel
-                    {
-                        BillId = order.OrderId.ToString(),
-                        Total = totalAmount,
-                        RoomName = "Order Payment"
-                    }, HttpContext);
-
-                    paymentOrders.Add(new
-                    {
-                        OrderId = order.OrderId,
-                        RestaurantId = restaurantId,
-                        TotalAmount = totalAmount,
-                        PaymentUrl = paymentUrl
-                    });
-                }
-                else
-                {
-                    var notification = new Notification
-                    {
-                        UserId = restaurantId, // Gán UserId của chủ nhà hàng nếu có
-                        Message = $"Đơn hàng #{order.OrderId} mới từ khách hàng {user.FullName}.",
-                        CreatedAt = DateTime.UtcNow,
-                        IsRead = false
-                    };
-
-                    _context.Notifications.Add(notification);
-                    await _context.SaveChangesAsync();
-                    // Nếu thanh toán khi nhận hàng, thông báo đơn hàng cho nhà hàng
-                    await _hubContext.Clients.Group($"Restaurant_{restaurantId}")
-             .SendAsync("ReceiveNotification", notification.Message);
-                }
             }
 
-            // 🛒 Xóa sản phẩm đã đặt trong giỏ hàng
             _context.CartItems.RemoveRange(cartItems);
             await _context.SaveChangesAsync();
 
@@ -138,6 +222,25 @@ namespace KhoaLuan1.Controllers
                 Message = "Orders created. Please complete payment if needed.",
                 Orders = paymentOrders
             });
+        }
+
+
+
+        private decimal CalculateShippingFee(double distanceKm)
+        {
+            const decimal baseFee = 10000m; // Phí cho 2 km đầu
+            const decimal additionalFeePerKm = 3500m; // Phí cho mỗi km tiếp theo
+            const double baseDistance = 2.0; // 2 km đầu
+
+            if (distanceKm <= baseDistance)
+            {
+                return baseFee;
+            }
+
+            double extraDistance = distanceKm - baseDistance;
+            decimal extraFee = (decimal)extraDistance * additionalFeePerKm;
+
+            return baseFee + extraFee;
         }
 
 
@@ -361,7 +464,9 @@ namespace KhoaLuan1.Controllers
         public string Address { get; set; }
         public List<int> SelectedCartItems { get; set; }
         public string PaymentMethod { get; set; }
+        public string? VoucherCode { get; set; } // Thêm mã giảm giá (có thể null nếu không sử dụng)
     }
-    
+
+
 
 }
