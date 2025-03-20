@@ -16,6 +16,7 @@ builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.Configure<MoMoOptionModel>(builder.Configuration.GetSection("MomoAPI"));
 builder.Services.AddScoped<IVnPayService, VnPayService>();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddLogging(logging => logging.AddConsole());   
 
 
 // Add DbContext

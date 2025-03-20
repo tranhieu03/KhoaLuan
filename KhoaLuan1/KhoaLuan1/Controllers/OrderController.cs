@@ -94,6 +94,13 @@ namespace KhoaLuan1.Controllers
             if (!cartItems.Any())
                 return BadRequest(new { message = "Selected cart items not found or empty." });
 
+            // Kiểm tra nếu có món ăn từ nhiều hơn một nhà hàng
+            var distinctRestaurantIds = cartItems.Select(c => c.Product.RestaurantId).Distinct().ToList();
+            if (distinctRestaurantIds.Count > 1)
+            {
+                return BadRequest(new { message = "Bạn không thể chọn món ăn từ nhiều nhà hàng khác nhau trong cùng một đơn hàng." });
+            }
+
             double orderLat, orderLng;
             try
             {
@@ -105,7 +112,7 @@ namespace KhoaLuan1.Controllers
             }
 
             var groupedByRestaurant = cartItems.GroupBy(c => c.Product.RestaurantId).ToList();
-            var paymentOrders = new List<object>();
+            var orderDetailsList = new List<object>();
 
             foreach (var group in groupedByRestaurant)
             {
@@ -136,7 +143,6 @@ namespace KhoaLuan1.Controllers
                 decimal discountAmount = 0;
                 Voucher? appliedVoucher = null;
 
-                // Kiểm tra mã giảm giá
                 if (!string.IsNullOrEmpty(request.VoucherCode))
                 {
                     appliedVoucher = await _context.Vouchers
@@ -148,7 +154,6 @@ namespace KhoaLuan1.Controllers
                         return BadRequest(new { message = "Mã giảm giá không hợp lệ hoặc đã hết hạn." });
                     }
 
-                    // Xác định xem voucher có áp dụng cho đơn hàng không
                     if (appliedVoucher.VoucherCategory.Name == "User" && appliedVoucher.UserId != userId)
                     {
                         return BadRequest(new { message = "Mã giảm giá này không thuộc về bạn." });
@@ -166,7 +171,6 @@ namespace KhoaLuan1.Controllers
                         }
                     }
 
-                    // Áp dụng giảm giá
                     if (appliedVoucher.VoucherType == "Fixed")
                     {
                         discountAmount = appliedVoucher.DiscountAmount;
@@ -193,13 +197,14 @@ namespace KhoaLuan1.Controllers
                     PaymentMethod = request.PaymentMethod,
                     PaymentStatus = request.PaymentMethod == "VNPay" ? "Paid" : "Unpaid",
                     DistanceKm = (decimal)distanceKm,
-                    
-                    DiscountAmount = discountAmount
+                    DiscountAmount = discountAmount,
+                    ShipFee = shippingFee
                 };
 
                 _context.Orders.Add(order);
                 await _context.SaveChangesAsync();
 
+                var orderDetails = new List<object>();
                 foreach (var item in items)
                 {
                     _context.OrderDetails.Add(new OrderDetail
@@ -209,9 +214,26 @@ namespace KhoaLuan1.Controllers
                         Quantity = item.Quantity,
                         Price = item.Product.Price
                     });
+                    orderDetails.Add(new
+                    {
+                        ProductId = item.ProductId,
+                        ProductName = item.Product.Name,
+                        Quantity = item.Quantity,
+                        Price = item.Product.Price
+                    });
                 }
 
                 await _context.SaveChangesAsync();
+
+                orderDetailsList.Add(new
+                {
+                    OrderId = order.OrderId,
+                    TotalAmount = order.TotalAmount,
+                    ShippingFee = order.ShipFee,
+                    DiscountAmount = order.DiscountAmount,
+                    OrderDate = order.OrderDate,
+                    OrderDetails = orderDetails
+                });
             }
 
             _context.CartItems.RemoveRange(cartItems);
@@ -219,10 +241,11 @@ namespace KhoaLuan1.Controllers
 
             return Ok(new
             {
-                Message = "Orders created. Please complete payment if needed.",
-                Orders = paymentOrders
+                Message = "Orders created successfully.",
+                Orders = orderDetailsList
             });
         }
+
 
 
 

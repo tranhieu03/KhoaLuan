@@ -14,8 +14,6 @@ namespace KhoaLuan1.Controllers
     {
         private readonly KhoaluantestContext _context;
         private readonly EmailService _emailService;
-        private static Dictionary<string, (RegisterRequest UserInfo, string Otp, DateTime ExpiryTime)> otpStorage = new(); // Lưu OTP tạm thời
-
 
         public AuthController(KhoaluantestContext context, EmailService emailService)
         {
@@ -34,68 +32,105 @@ namespace KhoaLuan1.Controllers
             if (await _context.Users.AnyAsync(u => u.Email == model.Email))
                 return BadRequest(new { message = "Email is already in use." });
 
-            // Tạo mã OTP
-            string otp = new Random().Next(100000, 999999).ToString();
+            try
+            {
+                // Xác định trạng thái tài khoản ban đầu là Inactive
+                var user = new User
+                {
+                    FullName = model.FullName,
+                    Email = model.Email,
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(model.Password),
+                    Role = model.Role,
+                    PhoneNumber = model.PhoneNumber,
+                    CreatedAt = DateTime.UtcNow,
+                    Status = "Inactive"
+                };
 
-            // Lưu thông tin đăng ký tạm thời (chưa lưu vào DB)
-            otpStorage[model.Email] = (model, otp, DateTime.UtcNow.AddMinutes(10));
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
 
-            // Gửi email chứa OTP
-            string emailBody = $"<h3>Mã OTP để xác nhận tài khoản của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 10 phút.</p>";
-            bool isSent = await _emailService.SendEmailAsync(model.Email, "Account Verification OTP", emailBody);
+                // Tạo mã OTP 6 số
+                string otp = new Random().Next(100000, 999999).ToString();
 
-            if (!isSent)
-                return StatusCode(500, new { message = "Gửi email thất bại." });
+                // Lưu vào bảng PasswordResetToken
+                var resetToken = new PasswordResetToken
+                {
+                    UserId = user.UserId,
+                    Token = otp,
+                    Expiration = DateTime.UtcNow.AddMinutes(10) // OTP hết hạn sau 10 phút
+                };
 
-            return Ok(new { message = "OTP đã được gửi đến email, vui lòng xác nhận để hoàn tất đăng ký." });
+                _context.PasswordResetTokens.Add(resetToken);
+                await _context.SaveChangesAsync();
+
+                // Gửi email chứa OTP
+                string emailBody = $"<h3>Mã OTP để xác nhận tài khoản của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 10 phút.</p>";
+
+                bool isSent = await _emailService.SendEmailAsync(user.Email, "Account Verification OTP", emailBody);
+
+                if (!isSent)
+                {
+                    // Nếu gửi email thất bại, xóa user và token
+                    _context.PasswordResetTokens.Remove(resetToken);
+                    _context.Users.Remove(user);
+                    await _context.SaveChangesAsync();
+                    return StatusCode(500, new { message = "Gửi email thất bại. Vui lòng thử lại sau." });
+                }
+
+                return Ok(new
+                {
+                    message = "Đăng ký thành công! OTP đã được gửi đến email, vui lòng xác nhận để hoàn tất đăng ký.",
+                    userId = user.UserId
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Registration error: {ex.Message}");
+                return StatusCode(500, new { message = "Đã xảy ra lỗi trong quá trình đăng ký: " + ex.Message });
+            }
         }
 
-
-        // API xác nhận OTP
+        // API xác nhận OTP không cần email
         [HttpPost("verify-otp")]
-        public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
+        public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpOnlyRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            if (!otpStorage.ContainsKey(request.Email))
-                return BadRequest(new { message = "Email không hợp lệ hoặc OTP đã hết hạn." });
-
-            var (userInfo, otp, expiryTime) = otpStorage[request.Email];
-
-            if (expiryTime < DateTime.UtcNow)
+            try
             {
-                otpStorage.Remove(request.Email);
-                return BadRequest(new { message = "OTP đã hết hạn." });
+                // Tìm token dựa trên OTP và thời hạn
+                var resetToken = await _context.PasswordResetTokens
+                    .FirstOrDefaultAsync(t => t.Token == request.Otp && t.Expiration > DateTime.UtcNow);
+
+                if (resetToken == null)
+                    return BadRequest(new { message = "OTP không hợp lệ hoặc đã hết hạn." });
+
+                // Tìm user dựa trên userId từ token
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == resetToken.UserId);
+                if (user == null)
+                    return NotFound(new { message = "Không tìm thấy người dùng liên kết với OTP này." });
+
+                // Kích hoạt tài khoản
+                user.Status = "Active";
+
+                // Xóa token đã sử dụng
+                _context.PasswordResetTokens.Remove(resetToken);
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Xác nhận OTP thành công, tài khoản đã được kích hoạt.",
+                    email = user.Email
+                });
             }
-
-            if (request.Otp != otp)
-                return BadRequest(new { message = "OTP không hợp lệ." });
-
-            // Xác định trạng thái tài khoản
-            string status = userInfo.Role == "Customer" ? "Active" : "Pending";
-
-            // Tạo người dùng mới và lưu vào database
-            var user = new User
+            catch (Exception ex)
             {
-                FullName = userInfo.FullName,
-                Email = userInfo.Email,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(userInfo.Password),
-                Role = userInfo.Role,
-                PhoneNumber = userInfo.PhoneNumber,
-                CreatedAt = DateTime.UtcNow,
-                Status = status
-            };
-
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
-            // Xóa OTP sau khi đăng ký thành công
-            otpStorage.Remove(request.Email);
-
-            return Ok(new { message = "Xác nhận OTP thành công, tài khoản đã được tạo." });
+                Console.WriteLine($"OTP verification error: {ex.Message}");
+                return StatusCode(500, new { message = "Đã xảy ra lỗi trong quá trình xác thực OTP: " + ex.Message });
+            }
         }
-
 
         // API Đăng nhập
         [HttpPost("login")]
@@ -120,27 +155,6 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Login successful." });
         }
 
-        // api admin xác nhận người dùng
-
-        //[HttpPost("confirm-user/{userId}")]
-        //public async Task<IActionResult> ConfirmUser(int userId)
-        //{
-        //    var user = await _context.Users.FindAsync(userId);
-        //    if (user == null)
-        //        return NotFound(new { message = "Người dùng không tồn tại." });
-
-        //    if (user.Status == "Active")
-        //        return BadRequest(new { message = "Người dùng đã được kích hoạt trước đó." });
-
-        //    user.Status = "Active";
-        //    _context.Users.Update(user);
-        //    await _context.SaveChangesAsync();
-
-        //    return Ok(new { message = "Người dùng đã được xác nhận thành công." });
-        //}
-
-
-
         // API Kiểm tra trạng thái đăng nhập
         [HttpGet("status")]
         public IActionResult Status()
@@ -153,7 +167,6 @@ namespace KhoaLuan1.Controllers
             var email = HttpContext.Session.GetString("Email");
             var role = HttpContext.Session.GetString("Role");
             var phoneNumber = HttpContext.Session.GetString("PhoneNumber");
-            
 
             return Ok(new
             {
@@ -174,7 +187,6 @@ namespace KhoaLuan1.Controllers
         }
 
         //API Quên mật khẩu
-
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
         {
@@ -210,7 +222,6 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Vui lòng kiểm tra email để lấy OTP." });
         }
 
-
         //API XÁc nhận OTP và mật khẩu mới
         [HttpPost("reset-password")]
         public IActionResult ResetPassword([FromBody] ResetPasswordRequest request)
@@ -238,9 +249,8 @@ namespace KhoaLuan1.Controllers
 
             return Ok(new { message = "Mật khẩu đã được cập nhật thành công." });
         }
-
-
     }
+
     public class RegisterRequest
     {
         [Required]
@@ -271,13 +281,13 @@ namespace KhoaLuan1.Controllers
         public string Password { get; set; }
     }
 
-
     public class ForgotPasswordRequest
     {
         [Required]
         [EmailAddress]
         public string Email { get; set; }
     }
+
     public class ResetPasswordRequest
     {
         [Required]
@@ -287,6 +297,8 @@ namespace KhoaLuan1.Controllers
         [MinLength(6, ErrorMessage = "Mật khẩu phải có ít nhất 6 ký tự.")]
         public string NewPassword { get; set; }
     }
+
+    // Lớp VerifyOtpRequest cũ (đã được thay thế bởi VerifyOtpOnlyRequest)
     public class VerifyOtpRequest
     {
         [Required]
@@ -297,5 +309,10 @@ namespace KhoaLuan1.Controllers
         public string Otp { get; set; }
     }
 
-
+    // Lớp yêu cầu mới chỉ cần OTP
+    public class VerifyOtpOnlyRequest
+    {
+        [Required]
+        public string Otp { get; set; }
+    }
 }
