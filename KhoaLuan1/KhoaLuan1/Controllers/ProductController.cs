@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.ComponentModel.DataAnnotations;
 
 namespace KhoaLuan1.Controllers
 {
@@ -19,7 +20,7 @@ namespace KhoaLuan1.Controllers
 
         // API Đăng bài bán hàng
         [HttpPost("create")]
-        public async Task<IActionResult> CreateProduct([FromBody] CreateProductRequest model)
+        public async Task<IActionResult> CreateProduct([FromForm] CreateProductRequest model)
         {
             // Kiểm tra trạng thái đăng nhập
             var userId = HttpContext.Session.GetInt32("UserId");
@@ -36,6 +37,45 @@ namespace KhoaLuan1.Controllers
             if (restaurant == null)
                 return BadRequest(new { message = "You need to register a restaurant before posting products." });
 
+            string imageUrl = null;
+
+            // Xử lý upload ảnh
+            if (model.ImageFile != null && model.ImageFile.Length > 0)
+            {
+                // Upload file ảnh
+                try
+                {
+                    var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+                    if (!Directory.Exists(uploadsFolder))
+                    {
+                        Directory.CreateDirectory(uploadsFolder);
+                    }
+
+                    var uniqueFileName = Guid.NewGuid().ToString() + "_" + model.ImageFile.FileName;
+                    var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await model.ImageFile.CopyToAsync(fileStream);
+                    }
+
+                    imageUrl = $"/uploads/{uniqueFileName}";
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, new { message = "Error uploading image file", error = ex.Message });
+                }
+            }
+            else if (!string.IsNullOrEmpty(model.ImageUrl))
+            {
+                // Sử dụng URL ảnh trực tiếp
+                imageUrl = model.ImageUrl;
+            }
+            else
+            {
+                return BadRequest(new { message = "Either ImageFile or ImageUrl must be provided" });
+            }
+
             // Tạo sản phẩm mới
             var product = new Product
             {
@@ -43,9 +83,10 @@ namespace KhoaLuan1.Controllers
                 Name = model.Name,
                 Description = model.Description,
                 Price = model.Price,
-                ImageUrl = model.ImageUrl,
+                ImageUrl = imageUrl,
                 StockQuantity = model.StockQuantity,
-                Status = "Active" // Thêm status mặc định
+                Status = "Active",
+                FoodCategoryId = model.FoodCategoryId
             };
 
             _context.Products.Add(product);
@@ -259,10 +300,25 @@ namespace KhoaLuan1.Controllers
 
     public class CreateProductRequest
     {
+        [Required]
         public string Name { get; set; }
+
         public string Description { get; set; }
+
+        [Required]
+        [Range(0.01, double.MaxValue)]
         public decimal Price { get; set; }
-        public string? ImageUrl { get; set; }
+
+        public IFormFile ImageFile { get; set; } // Cho upload file
+
+        public string ImageUrl { get; set; } // Cho URL ảnh
+
+        [Required]
+        [Range(0, int.MaxValue)]
         public int StockQuantity { get; set; }
+
+        public int? FoodCategoryId { get; set; }
     }
+
+
 }

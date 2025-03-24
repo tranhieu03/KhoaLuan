@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace KhoaLuan1.Controllers
 {
@@ -480,6 +481,233 @@ namespace KhoaLuan1.Controllers
             return Ok(orders);
         }
 
+
+
+
+        // API người giao hàng xác nhận đã giao hàng thành công
+        [HttpPost("confirm-delivery/{orderId}")]
+        public async Task<IActionResult> ConfirmDelivery(int orderId)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null || role != "DeliveryPerson")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền xác nhận giao hàng." });
+            }
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { message = "Đơn hàng không tồn tại." });
+            }
+
+            if (order.Status != "Delivering")
+            {
+                return BadRequest(new { message = "Trạng thái đơn hàng không hợp lệ để xác nhận giao hàng." });
+            }
+
+            if (order.DeliveryPersonId != userId)
+            {
+                return Unauthorized(new { message = "Bạn không phải là người giao hàng của đơn hàng này." });
+            }
+
+            // Cập nhật trạng thái đơn hàng thành "Delivered"
+            order.Status = "Delivered";
+            await _context.SaveChangesAsync();
+
+            // Tạo thông báo cho khách hàng
+            var notificationToCustomer = new Notification
+            {
+                UserId = order.UserId,
+                Message = $"Đơn hàng #{order.OrderId} đã được giao thành công. Vui lòng xác nhận đã nhận hàng.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            // Tạo thông báo cho nhà hàng
+            var notificationToRestaurant = new Notification
+            {
+                UserId = await _context.Restaurants
+                    .Where(r => r.RestaurantId == order.RestaurantId)
+                    .Select(r => r.SellerId)
+                    .FirstOrDefaultAsync(),
+                Message = $"Đơn hàng #{order.OrderId} đã được giao thành công.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            _context.Notifications.AddRange(notificationToCustomer, notificationToRestaurant);
+            await _context.SaveChangesAsync();
+
+            // Gửi thông báo qua SignalR
+            await _hubContext.Clients.User(order.UserId.ToString())
+                .SendAsync("ReceiveNotification", notificationToCustomer.Message);
+
+            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
+                .SendAsync("ReceiveNotification", notificationToRestaurant.Message);
+
+            return Ok(new { message = "Xác nhận giao hàng thành công." });
+        }
+
+        // API khách hàng xác nhận đã nhận được hàng
+        [HttpPost("confirm-receipt/{orderId}")]
+        public async Task<IActionResult> ConfirmReceipt(int orderId)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null || role != "Customer")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền xác nhận nhận hàng." });
+            }
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { message = "Đơn hàng không tồn tại." });
+            }
+
+            if (order.Status != "Delivered")
+            {
+                return BadRequest(new { message = "Trạng thái đơn hàng không hợp lệ để xác nhận nhận hàng." });
+            }
+
+            if (order.UserId != userId)
+            {
+                return Unauthorized(new { message = "Bạn không phải là người mua của đơn hàng này." });
+            }
+
+            // Cập nhật trạng thái đơn hàng thành "Completed"
+            order.Status = "Completed";
+
+            // Cập nhật trạng thái thanh toán thành "Paid" nếu là thanh toán khi nhận hàng
+            if (order.PaymentMethod == "COD" && order.PaymentStatus == "Unpaid")
+            {
+                order.PaymentStatus = "Paid";
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Tạo thông báo cho nhà hàng
+            var restaurantSellerId = await _context.Restaurants
+                .Where(r => r.RestaurantId == order.RestaurantId)
+                .Select(r => r.SellerId)
+                .FirstOrDefaultAsync();
+
+            var notificationToRestaurant = new Notification
+            {
+                UserId = restaurantSellerId,
+                Message = $"Khách hàng đã xác nhận nhận đơn hàng #{order.OrderId}.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            // Tạo thông báo cho người giao hàng
+            var notificationToDeliveryPerson = new Notification
+            {
+                UserId = order.DeliveryPersonId.Value,
+                Message = $"Khách hàng đã xác nhận nhận đơn hàng #{order.OrderId}.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            _context.Notifications.AddRange(notificationToRestaurant, notificationToDeliveryPerson);
+            await _context.SaveChangesAsync();
+
+            // Gửi thông báo qua SignalR
+            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
+                .SendAsync("ReceiveNotification", notificationToRestaurant.Message);
+
+            await _hubContext.Clients.User(order.DeliveryPersonId.ToString())
+                .SendAsync("ReceiveNotification", notificationToDeliveryPerson.Message);
+
+            return Ok(new { message = "Xác nhận nhận hàng thành công." });
+        }
+
+        // API khách hàng báo chưa nhận được hàng
+        [HttpPost("report-undelivered/{orderId}")]
+        public async Task<IActionResult> ReportUndelivered(int orderId, [FromBody] ReportUndeliveredRequest request)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null || role != "Customer")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền báo cáo đơn hàng." });
+            }
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { message = "Đơn hàng không tồn tại." });
+            }
+
+            if (order.Status != "Delivered")
+            {
+                return BadRequest(new { message = "Chỉ có thể báo chưa nhận được hàng khi đơn hàng ở trạng thái đã giao." });
+            }
+
+            if (order.UserId != userId)
+            {
+                return Unauthorized(new { message = "Bạn không phải là người mua của đơn hàng này." });
+            }
+
+            // Cập nhật trạng thái đơn hàng
+            order.Status = "DeliveryDisputed";
+            await _context.SaveChangesAsync();
+
+            // Tạo thông báo cho nhà hàng
+            var restaurantSellerId = await _context.Restaurants
+                .Where(r => r.RestaurantId == order.RestaurantId)
+                .Select(r => r.SellerId)
+                .FirstOrDefaultAsync();
+
+            var notificationToRestaurant = new Notification
+            {
+                UserId = restaurantSellerId,
+                Message = $"Khách hàng báo chưa nhận được đơn hàng #{order.OrderId}. Lý do: {request.Reason}",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            // Tạo thông báo cho người giao hàng
+            var notificationToDeliveryPerson = new Notification
+            {
+                UserId = order.DeliveryPersonId.Value,
+                Message = $"Khách hàng báo chưa nhận được đơn hàng #{order.OrderId}. Lý do: {request.Reason}",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            _context.Notifications.AddRange(notificationToRestaurant, notificationToDeliveryPerson);
+
+            // Lưu thông tin tranh chấp
+            var message = new Message
+            {
+                SenderId = userId.Value,
+                ReceiverId = order.DeliveryPersonId.Value,
+                OrderId = order.OrderId,
+                Content = $"Khách hàng báo chưa nhận được hàng. Lý do: {request.Reason}",
+                SentAt = DateTime.UtcNow
+            };
+
+            _context.Messages.Add(message);
+            await _context.SaveChangesAsync();
+
+            // Gửi thông báo qua SignalR
+            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
+                .SendAsync("ReceiveNotification", notificationToRestaurant.Message);
+
+            await _hubContext.Clients.User(order.DeliveryPersonId.ToString())
+                .SendAsync("ReceiveNotification", notificationToDeliveryPerson.Message);
+
+            return Ok(new { message = "Đã báo cáo chưa nhận được hàng. Chúng tôi sẽ liên hệ để hỗ trợ bạn." });
+        }
+
+
+
+
     }
 
     public class CreateOrderRequest
@@ -490,6 +718,10 @@ namespace KhoaLuan1.Controllers
         public string? VoucherCode { get; set; } // Thêm mã giảm giá (có thể null nếu không sử dụng)
     }
 
-
+    public class ReportUndeliveredRequest
+    {
+        [Required]
+        public string Reason { get; set; }
+    }
 
 }

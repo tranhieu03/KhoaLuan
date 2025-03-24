@@ -23,6 +23,8 @@ public partial class User
 
     public string? Address { get; set; }
 
+    public decimal? AverageRating { get; set; }
+
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
 
     public virtual ICollection<Message> MessageReceivers { get; set; } = new List<Message>();
@@ -36,6 +38,8 @@ public partial class User
     public virtual ICollection<Order> OrderUsers { get; set; } = new List<Order>();
 
     public virtual ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
+
+    public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
 
     public virtual ICollection<Restaurant> Restaurants { get; set; } = new List<Restaurant>();
 

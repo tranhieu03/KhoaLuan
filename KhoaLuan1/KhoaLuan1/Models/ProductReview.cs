@@ -3,11 +3,11 @@ using System.Collections.Generic;
 
 namespace KhoaLuan1.Models;
 
-public partial class Review
+public partial class ProductReview
 {
-    public int ReviewId { get; set; }
+    public int ProductReviewId { get; set; }
 
-    public int OrderId { get; set; }
+    public int OrderDetailId { get; set; }
 
     public int UserId { get; set; }
 
@@ -17,7 +17,7 @@ public partial class Review
 
     public DateTime? CreatedAt { get; set; }
 
-    public virtual Order Order { get; set; } = null!;
+    public virtual OrderDetail OrderDetail { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;
 }

@@ -31,6 +31,8 @@ public partial class KhoaluantestContext : DbContext
 
     public virtual DbSet<Product> Products { get; set; }
 
+    public virtual DbSet<ProductReview> ProductReviews { get; set; }
+
     public virtual DbSet<Restaurant> Restaurants { get; set; }
 
     public virtual DbSet<Review> Reviews { get; set; }
@@ -194,6 +196,7 @@ public partial class KhoaluantestContext : DbContext
         {
             entity.HasKey(e => e.ProductId).HasName("PK__Products__B40CC6CD807A8870");
 
+            entity.Property(e => e.AverageRating).HasColumnType("decimal(3, 2)");
             entity.Property(e => e.ImageUrl).HasMaxLength(255);
             entity.Property(e => e.Name).HasMaxLength(100);
             entity.Property(e => e.Price).HasColumnType("decimal(10, 2)");
@@ -212,6 +215,26 @@ public partial class KhoaluantestContext : DbContext
                 .HasForeignKey(d => d.RestaurantId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Products__Restau__2EDAF651");
+        });
+
+        modelBuilder.Entity<ProductReview>(entity =>
+        {
+            entity.HasKey(e => e.ProductReviewId).HasName("PK__ProductR__396318808F1B9CA5");
+
+            entity.ToTable(tb => tb.HasTrigger("trg_UpdateProductRating"));
+
+            entity.Property(e => e.Comment).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+
+            entity.HasOne(d => d.OrderDetail).WithMany(p => p.ProductReviews)
+                .HasForeignKey(d => d.OrderDetailId)
+                .HasConstraintName("FK_ProductReview_OrderDetail");
+
+            entity.HasOne(d => d.User).WithMany(p => p.ProductReviews)
+                .HasForeignKey(d => d.UserId)
+                .HasConstraintName("FK_ProductReview_User");
         });
 
         modelBuilder.Entity<Restaurant>(entity =>
@@ -239,21 +262,22 @@ public partial class KhoaluantestContext : DbContext
 
         modelBuilder.Entity<Review>(entity =>
         {
-            entity.HasKey(e => e.ReviewId).HasName("PK__Reviews__74BC79CE7C94F8F2");
+            entity.HasKey(e => e.ReviewId).HasName("PK__Review__74BC79CEBA7C422C");
 
+            entity.ToTable(tb => tb.HasTrigger("trg_UpdateDeliveryPersonRating"));
+
+            entity.Property(e => e.Comment).HasMaxLength(1000);
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Order).WithMany(p => p.Reviews)
                 .HasForeignKey(d => d.OrderId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Reviews__OrderId__42E1EEFE");
+                .HasConstraintName("FK_Review_Order");
 
             entity.HasOne(d => d.User).WithMany(p => p.Reviews)
                 .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Reviews__UserId__41EDCAC5");
+                .HasConstraintName("FK_Review_User");
         });
 
         modelBuilder.Entity<User>(entity =>
@@ -263,6 +287,7 @@ public partial class KhoaluantestContext : DbContext
             entity.HasIndex(e => e.Email, "UQ__Users__A9D10534468CC25F").IsUnique();
 
             entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.AverageRating).HasColumnType("decimal(3, 2)");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");

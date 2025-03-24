@@ -1,5 +1,6 @@
 ﻿using KhoaLuan1.Models;
 using KhoaLuan1.Service;
+using KhoaLuan1.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,8 @@ builder.Services.AddHttpClient<IMoMoService, MoMoService>();
 builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.Configure<MoMoOptionModel>(builder.Configuration.GetSection("MomoAPI"));
 builder.Services.AddScoped<IVnPayService, VnPayService>();
+builder.Services.AddHostedService<OrderAutoCompletionService>();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddLogging(logging => logging.AddConsole());   
 

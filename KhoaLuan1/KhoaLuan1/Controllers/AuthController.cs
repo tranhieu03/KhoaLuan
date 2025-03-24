@@ -28,6 +28,11 @@ namespace KhoaLuan1.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
+            // Kiểm tra role hợp lệ (chỉ cho phép Customer, Seller, DeliveryPerson)
+            string[] validRoles = { "Customer", "seller", "DeliveryPerson" };
+            if (!validRoles.Contains(model.Role))
+                return BadRequest(new { message = "Role không hợp lệ. Chỉ chấp nhận Customer, seller hoặc DeliveryPerson." });
+
             // Kiểm tra email đã tồn tại
             if (await _context.Users.AnyAsync(u => u.Email == model.Email))
                 return BadRequest(new { message = "Email is already in use." });
@@ -80,7 +85,8 @@ namespace KhoaLuan1.Controllers
                 return Ok(new
                 {
                     message = "Đăng ký thành công! OTP đã được gửi đến email, vui lòng xác nhận để hoàn tất đăng ký.",
-                    userId = user.UserId
+                    userId = user.UserId,
+                    role = user.Role
                 });
             }
             catch (Exception ex)
@@ -122,7 +128,8 @@ namespace KhoaLuan1.Controllers
                 return Ok(new
                 {
                     message = "Xác nhận OTP thành công, tài khoản đã được kích hoạt.",
-                    email = user.Email
+                    email = user.Email,
+                    role = user.Role
                 });
             }
             catch (Exception ex)
@@ -131,7 +138,6 @@ namespace KhoaLuan1.Controllers
                 return StatusCode(500, new { message = "Đã xảy ra lỗi trong quá trình xác thực OTP: " + ex.Message });
             }
         }
-
         // API Đăng nhập
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest model)
@@ -266,7 +272,7 @@ namespace KhoaLuan1.Controllers
         public string Password { get; set; }
 
         [Required]
-        [RegularExpression("^(Customer|Seller|DeliveryPerson|Admin)$", ErrorMessage = "Invalid role.")]
+        [RegularExpression("^(Customer|seller|DeliveryPerson|Admin)$", ErrorMessage = "Invalid role.")]
         public string Role { get; set; }
         public string PhoneNumber { get; set; }
     }
