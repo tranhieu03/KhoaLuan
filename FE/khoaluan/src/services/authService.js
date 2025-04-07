@@ -1,29 +1,45 @@
+// src/services/authService.js
 import axios from "axios";
 
-const API_URL = "https://localhost:44308/api/Auth";
+const API_URL = "https://localhost:44308/api/Auth"; // Replace with your actual API URL
 
-axios.defaults.withCredentials = true; // Đảm bảo gửi cookie session với mọi request
-
-export const register = async (data) => {
-  const response = await axios.post(`${API_URL}/register`, data);
+const axiosInstance = axios.create({
+  baseURL: API_URL,
+  withCredentials: true // This is crucial for session cookies
+});
+export const register = async (userData) => {
+  const response = await axios.post(`${API_URL}/register`, userData);
   return response.data;
 };
 
-export const login = async (data) => {
-  const response = await axios.post(`${API_URL}/login`, data);
+export const verifyOtp = async (otpData) => {
+  const response = await axios.post(`${API_URL}/verify-otp`, otpData);
   return response.data;
 };
 
-export const getStatus = async () => {
+export const login = async (credentials) => {
+  const response = await axiosInstance.post("/login", credentials);
+  return response.data;
+};
+
+export const checkLoginStatus = async () => {
   try {
-    const response = await axios.get(`${API_URL}/status`, { withCredentials: true });
+    const response = await axiosInstance.get("/status");
     return response.data;
   } catch (error) {
-    throw error;
+    return null;
   }
 };
 
 export const logout = async () => {
-  const response = await axios.post(`${API_URL}/logout`);
-  return response.data;
+  try {
+    await axiosInstance.post("/logout");
+    localStorage.removeItem("user");
+  } catch (error) {
+    console.error("Logout error:", error);
+  }
+};
+
+export const getCurrentUser = () => {
+  return JSON.parse(localStorage.getItem("user"));
 };

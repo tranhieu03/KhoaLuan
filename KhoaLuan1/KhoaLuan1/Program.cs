@@ -1,4 +1,5 @@
-﻿using KhoaLuan1.Models;
+﻿using KhoaLuan1.Hubs;
+using KhoaLuan1.Models;
 using KhoaLuan1.Service;
 using KhoaLuan1.Services;
 using Microsoft.EntityFrameworkCore;
@@ -11,11 +12,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<EmailService>();
-builder.Services.AddSingleton<MapService>();
-builder.Services.AddHttpClient<IMoMoService, MoMoService>();
-builder.Services.AddScoped<IMoMoService, MoMoService>();
-builder.Services.Configure<MoMoOptionModel>(builder.Configuration.GetSection("MomoAPI"));
-builder.Services.AddScoped<IVnPayService, VnPayService>();
+// Đăng ký HttpClient với cấu hình riêng cho MapService
+builder.Services.AddHttpClient<MapService>(client =>
+{
+    client.BaseAddress = new Uri("https://rsapi.goong.io");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("Accept", "application/json");
+});
+
+// Đăng ký MapService
+builder.Services.AddScoped<MapService>();
+builder.Services.AddSingleton<VNPayService>();
+builder.Services.AddScoped<IVNPayService, VNPayService>();
 builder.Services.AddHostedService<OrderAutoCompletionService>();
 
 builder.Services.AddHttpContextAccessor();
@@ -31,6 +39,8 @@ builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
     options.Cookie.Name = ".KhoaLuan1.Session";
+    options.Cookie.SameSite = SameSiteMode.None; // For cross-site requests
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always; // For HTTPS
     options.IdleTimeout = TimeSpan.FromMinutes(30); // Session timeout
     options.Cookie.HttpOnly = true;
     options.Cookie.IsEssential = true;
@@ -69,6 +79,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<KhoaLuan1.Hubs.ChatHub>("/chatHub");
-app.MapHub<KhoaLuan1.Hubs.NotificationHub>("/notificationHub");
+app.MapHub<NotificationHub>("/notificationHub");
 
 app.Run();

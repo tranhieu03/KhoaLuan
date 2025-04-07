@@ -130,6 +130,7 @@ public partial class KhoaluantestContext : DbContext
             entity.Property(e => e.OrderDate)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.PaymentDate).HasColumnType("datetime");
             entity.Property(e => e.PaymentMethod).HasMaxLength(50);
             entity.Property(e => e.PaymentStatus).HasMaxLength(50);
             entity.Property(e => e.ShipFee).HasColumnType("decimal(18, 2)");
@@ -137,6 +138,7 @@ public partial class KhoaluantestContext : DbContext
                 .HasMaxLength(50)
                 .HasDefaultValue("Pending");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.TransactionId).HasMaxLength(100);
 
             entity.HasOne(d => d.DeliveryPerson).WithMany(p => p.OrderDeliveryPeople)
                 .HasForeignKey(d => d.DeliveryPersonId)

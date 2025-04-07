@@ -35,6 +35,10 @@ public partial class Order
 
     public decimal ShipFee { get; set; }
 
+    public string? TransactionId { get; set; }
+
+    public DateTime? PaymentDate { get; set; }
+
     public virtual User? DeliveryPerson { get; set; }
 
     public virtual ICollection<Message> Messages { get; set; } = new List<Message>();

@@ -29,15 +29,7 @@ namespace KhoaLuan1.Controllers
      string sortBy = "name",
      bool sortAscending = true)
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "Customer")
-                return BadRequest(new { message = "Only customers are allowed to view all products." });
-
+            
             // Base query with filtering
             var query = _context.Products
                 .Include(p => p.Restaurant)

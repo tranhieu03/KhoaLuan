@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 
 namespace KhoaLuan1.Controllers
 {
@@ -14,22 +15,23 @@ namespace KhoaLuan1.Controllers
     [ApiController]
     public class OrderController : ControllerBase
     {
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<OrderController> _logger;
         private readonly KhoaluantestContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
-        private readonly IVnPayService _vnPayService;
+        private readonly VNPayService _vnPayService;
         private readonly MapService _mapService;
 
-        private readonly IMoMoService _moMoService;
 
         public OrderController(KhoaluantestContext context, IHubContext<NotificationHub> hubContext,
-            IMoMoService moMoService, IVnPayService vnPayService, MapService mapService)
+           VNPayService vnPayService, MapService mapService, IConfiguration configuration, ILogger<OrderController> logger)
         {
             _context = context;
             _hubContext = hubContext;
-            
-            _moMoService = moMoService;
             _vnPayService = vnPayService;
             _mapService = mapService;
+            _configuration = configuration;
+            _logger = logger;
         }
 
         // api danh sách voucher
@@ -71,120 +73,162 @@ namespace KhoaLuan1.Controllers
         [HttpPost("create-order")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            if (userId == null)
-                return Unauthorized(new { message = "Not logged in." });
-
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null)
-                return NotFound(new { message = "User not found." });
-
-            string deliveryAddress = string.IsNullOrEmpty(request.Address) ? user.Address : request.Address;
-            if (string.IsNullOrEmpty(deliveryAddress))
-                return BadRequest(new { message = "Address is required. Please provide an address or update your profile." });
-
-            if (request.SelectedCartItems == null || !request.SelectedCartItems.Any())
-                return BadRequest(new { message = "No cart items selected." });
-
-            var cartItems = await _context.CartItems
-                .Where(c => c.UserId == userId && request.SelectedCartItems.Contains(c.CartItemId))
-                .Include(c => c.Product)
-                .ThenInclude(p => p.Restaurant)
-                .ToListAsync();
-
-            if (!cartItems.Any())
-                return BadRequest(new { message = "Selected cart items not found or empty." });
-
-            // Kiểm tra nếu có món ăn từ nhiều hơn một nhà hàng
-            var distinctRestaurantIds = cartItems.Select(c => c.Product.RestaurantId).Distinct().ToList();
-            if (distinctRestaurantIds.Count > 1)
-            {
-                return BadRequest(new { message = "Bạn không thể chọn món ăn từ nhiều nhà hàng khác nhau trong cùng một đơn hàng." });
-            }
-
-            double orderLat, orderLng;
             try
             {
-                (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = $"Không thể lấy tọa độ từ địa chỉ giao hàng: {ex.Message}" });
-            }
+                _logger.LogInformation("Bắt đầu xử lý yêu cầu tạo đơn hàng");
 
-            var groupedByRestaurant = cartItems.GroupBy(c => c.Product.RestaurantId).ToList();
-            var orderDetailsList = new List<object>();
+                // 1. Xác thực người dùng
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Người dùng chưa đăng nhập");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+                }
 
-            foreach (var group in groupedByRestaurant)
-            {
-                var restaurantId = group.Key;
-                var items = group.ToList();
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không tìm thấy thông tin người dùng {UserId}", userId);
+                    return NotFound(new { success = false, message = "Không tìm thấy thông tin người dùng." });
+                }
 
-                decimal productTotal = items.Sum(c => c.Quantity * c.Product.Price);
+                // 2. Xác thực địa chỉ giao hàng
+                string deliveryAddress = string.IsNullOrEmpty(request.Address) ? user.Address : request.Address;
+                if (string.IsNullOrEmpty(deliveryAddress))
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Thiếu địa chỉ giao hàng");
+                    return BadRequest(new { success = false, message = "Vui lòng cung cấp địa chỉ giao hàng hoặc cập nhật địa chỉ trong hồ sơ." });
+                }
 
-                var restaurant = items.First().Product.Restaurant;
-                double restaurantLat = (double)restaurant.Latitude;
-                double restaurantLng = (double)restaurant.Longitude;
+                // 3. Kiểm tra giỏ hàng
+                if (request.SelectedCartItems == null || !request.SelectedCartItems.Any())
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không có sản phẩm được chọn");
+                    return BadRequest(new { success = false, message = "Vui lòng chọn ít nhất một sản phẩm để đặt hàng." });
+                }
 
-                double? distanceKmNullable;
+                var cartItems = await _context.CartItems
+                    .Where(c => c.UserId == userId && request.SelectedCartItems.Contains(c.CartItemId))
+                    .Include(c => c.Product)
+                    .ThenInclude(p => p.Restaurant)
+                    .ToListAsync();
+
+                if (!cartItems.Any())
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không tìm thấy sản phẩm đã chọn");
+                    return BadRequest(new { success = false, message = "Không tìm thấy sản phẩm đã chọn hoặc giỏ hàng trống." });
+                }
+
+                // 4. Kiểm tra món ăn từ nhiều nhà hàng
+                var distinctRestaurantIds = cartItems.Select(c => c.Product.RestaurantId).Distinct().ToList();
+                if (distinctRestaurantIds.Count > 1)
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Sản phẩm từ nhiều nhà hàng khác nhau");
+                    return BadRequest(new { success = false, message = "Bạn không thể chọn món ăn từ nhiều nhà hàng khác nhau trong cùng một đơn hàng." });
+                }
+
+                // 5. Lấy tọa độ địa chỉ giao hàng
+                double orderLat, orderLng;
                 try
                 {
-                    distanceKmNullable = await _mapService.CalculateDistanceAsync(restaurantLat, restaurantLng, orderLat, orderLng);
-
-                    if (distanceKmNullable == null)
-                        return BadRequest(new { message = "Không thể tính khoảng cách đường đi!" });
+                    _logger.LogInformation("Đang lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
+                    (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+                    _logger.LogInformation("Đã lấy tọa độ thành công: {Lat}, {Lng}", orderLat, orderLng);
                 }
                 catch (Exception ex)
                 {
-                    return BadRequest(new { message = $"Không thể tính khoảng cách đường đi: {ex.Message}" });
+                    _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ giao hàng: {Address}", deliveryAddress);
+                    return BadRequest(new { success = false, message = $"Không thể xác định vị trí địa chỉ giao hàng. Vui lòng kiểm tra lại địa chỉ." });
                 }
-                double distanceKm = distanceKmNullable.Value;
 
-                decimal shippingFee = CalculateShippingFee(distanceKm);
+                // 6. Xử lý tạo đơn hàng
+                var restaurantId = distinctRestaurantIds.First();
+                var restaurant = cartItems.First().Product.Restaurant;
+                double restaurantLat = (double)restaurant.Latitude;
+                double restaurantLng = (double)restaurant.Longitude;
+
+                // 7. Tính khoảng cách và phí vận chuyển
+                double? distanceKm;
+                try
+                {
+                    _logger.LogInformation("Đang tính khoảng cách giữa nhà hàng và địa chỉ giao hàng");
+                    distanceKm = await _mapService.CalculateDistanceAsync(restaurantLat, restaurantLng, orderLat, orderLng);
+                    if (distanceKm == null)
+                    {
+                        _logger.LogWarning("Không thể tính khoảng cách đường đi");
+                        return BadRequest(new { success = false, message = "Không thể tính khoảng cách đường đi. Vui lòng thử lại sau." });
+                    }
+                    _logger.LogInformation("Khoảng cách: {Distance} km", distanceKm);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi khi tính khoảng cách đường đi");
+                    return BadRequest(new { success = false, message = "Không thể tính khoảng cách đường đi. Vui lòng thử lại sau." });
+                }
+
+                // 8. Tính toán giá trị đơn hàng
+                decimal productTotal = cartItems.Sum(c => c.Quantity * c.Product.Price);
+                decimal shippingFee = CalculateShippingFee(distanceKm.Value);
                 decimal discountAmount = 0;
                 Voucher? appliedVoucher = null;
 
+                // 9. Xử lý voucher nếu có
                 if (!string.IsNullOrEmpty(request.VoucherCode))
                 {
+                    _logger.LogInformation("Đang xử lý voucher: {VoucherCode}", request.VoucherCode);
                     appliedVoucher = await _context.Vouchers
                         .Include(v => v.VoucherCategory)
                         .FirstOrDefaultAsync(v => v.Code == request.VoucherCode && v.Status == "Active");
 
-                    if (appliedVoucher == null)
+                    if (appliedVoucher != null)
                     {
-                        return BadRequest(new { message = "Mã giảm giá không hợp lệ hoặc đã hết hạn." });
-                    }
+                        // Validate voucher
+                        bool isValidVoucher = true;
+                        string validationMessage = string.Empty;
 
-                    if (appliedVoucher.VoucherCategory.Name == "User" && appliedVoucher.UserId != userId)
-                    {
-                        return BadRequest(new { message = "Mã giảm giá này không thuộc về bạn." });
-                    }
-                    if (appliedVoucher.VoucherCategory.Name == "Restaurant" && appliedVoucher.RestaurantId != restaurantId)
-                    {
-                        return BadRequest(new { message = "Mã giảm giá này không áp dụng cho nhà hàng này." });
-                    }
-                    if (appliedVoucher.VoucherCategory.Name == "Product")
-                    {
-                        var validProduct = items.Any(i => i.ProductId == appliedVoucher.ProductId);
-                        if (!validProduct)
+                        if (appliedVoucher.VoucherCategory.Name == "User" && appliedVoucher.UserId != userId)
                         {
-                            return BadRequest(new { message = "Mã giảm giá này không áp dụng cho các sản phẩm trong đơn hàng." });
+                            isValidVoucher = false;
+                            validationMessage = "Mã giảm giá này không thuộc về bạn.";
+                        }
+                        else if (appliedVoucher.VoucherCategory.Name == "Restaurant" && appliedVoucher.RestaurantId != restaurantId)
+                        {
+                            isValidVoucher = false;
+                            validationMessage = "Mã giảm giá này không áp dụng cho nhà hàng này.";
+                        }
+                        else if (appliedVoucher.VoucherCategory.Name == "Product" && !cartItems.Any(i => i.ProductId == appliedVoucher.ProductId))
+                        {
+                            isValidVoucher = false;
+                            validationMessage = "Mã giảm giá này không áp dụng cho các sản phẩm trong đơn hàng.";
+                        }
+
+                        if (isValidVoucher)
+                        {
+                            _logger.LogInformation("Voucher hợp lệ, đang áp dụng giảm giá");
+                            discountAmount = appliedVoucher.VoucherType == "Fixed"
+                                ? appliedVoucher.DiscountAmount
+                                : (productTotal * appliedVoucher.DiscountAmount) / 100;
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Voucher không hợp lệ: {Message}", validationMessage);
+                            return BadRequest(new { success = false, message = validationMessage });
                         }
                     }
-
-                    if (appliedVoucher.VoucherType == "Fixed")
+                    else
                     {
-                        discountAmount = appliedVoucher.DiscountAmount;
-                    }
-                    else if (appliedVoucher.VoucherType == "Percentage")
-                    {
-                        discountAmount = (productTotal * appliedVoucher.DiscountAmount) / 100;
+                        _logger.LogWarning("Không tìm thấy voucher có mã: {VoucherCode}", request.VoucherCode);
+                        return BadRequest(new { success = false, message = "Mã giảm giá không hợp lệ hoặc đã hết hạn." });
                     }
                 }
 
                 decimal totalAmount = productTotal + shippingFee - discountAmount;
                 if (totalAmount < 0) totalAmount = 0;
 
+                _logger.LogInformation("Thông tin đơn hàng: Tổng tiền hàng={ProductTotal}, Phí ship={ShippingFee}, Giảm giá={DiscountAmount}, Tổng thanh toán={TotalAmount}",
+                    productTotal, shippingFee, discountAmount, totalAmount);
+
+                // 10. Tạo đơn hàng
                 var order = new Order
                 {
                     UserId = userId.Value,
@@ -196,17 +240,19 @@ namespace KhoaLuan1.Controllers
                     Latitude = (decimal)orderLat,
                     Longitude = (decimal)orderLng,
                     PaymentMethod = request.PaymentMethod,
-                    PaymentStatus = request.PaymentMethod == "VNPay" ? "Paid" : "Unpaid",
-                    DistanceKm = (decimal)distanceKm,
+                    PaymentStatus = "Unpaid", // Mặc định là Unpaid, sẽ cập nhật khi thanh toán thành công
+                    DistanceKm = (decimal)distanceKm.Value,
                     DiscountAmount = discountAmount,
                     ShipFee = shippingFee
                 };
 
                 _context.Orders.Add(order);
                 await _context.SaveChangesAsync();
+                _logger.LogInformation("Đã tạo đơn hàng: OrderId={OrderId}", order.OrderId);
 
+                // 11. Tạo chi tiết đơn hàng
                 var orderDetails = new List<object>();
-                foreach (var item in items)
+                foreach (var item in cartItems)
                 {
                     _context.OrderDetails.Add(new OrderDetail
                     {
@@ -215,6 +261,7 @@ namespace KhoaLuan1.Controllers
                         Quantity = item.Quantity,
                         Price = item.Product.Price
                     });
+
                     orderDetails.Add(new
                     {
                         ProductId = item.ProductId,
@@ -224,30 +271,134 @@ namespace KhoaLuan1.Controllers
                     });
                 }
 
+                // 12. Xóa giỏ hàng
+                _context.CartItems.RemoveRange(cartItems);
                 await _context.SaveChangesAsync();
+                _logger.LogInformation("Đã xóa các sản phẩm đã chọn khỏi giỏ hàng");
 
-                orderDetailsList.Add(new
+                // 13. Xử lý thanh toán VNPay nếu được chọn
+                if (request.PaymentMethod == "VNPay")
                 {
-                    OrderId = order.OrderId,
-                    TotalAmount = order.TotalAmount,
-                    ShippingFee = order.ShipFee,
-                    DiscountAmount = order.DiscountAmount,
-                    OrderDate = order.OrderDate,
-                    OrderDetails = orderDetails
+                    _logger.LogInformation("Bắt đầu xử lý thanh toán VNPay cho đơn hàng {OrderId}", order.OrderId);
+
+                    try
+                    {
+                        // Tạo PaymentRequest từ Order
+                        var paymentRequest = new PaymentRequest
+                        {
+                            OrderId = order.OrderId.ToString(),
+                            Amount = order.TotalAmount,
+                            OrderDescription = $"Thanh toan don hang {order.OrderId}",
+                            CustomerName = user.FullName ?? "Khach hang",
+                            ReturnUrl = _configuration["VNPay:ReturnUrl"]
+                        };
+
+                        var paymentUrl = _vnPayService.CreatePaymentUrl(paymentRequest, HttpContext);
+                        _logger.LogInformation("Đã tạo URL thanh toán VNPay thành công cho đơn hàng {OrderId}", order.OrderId);
+
+                        // Lưu thông tin đơn hàng tạm thời vào session
+                        HttpContext.Session.SetString($"Order_{order.OrderId}", System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            OrderId = order.OrderId,
+                            CreatedDate = DateTime.UtcNow
+                        }));
+
+                        return Ok(new
+                        {
+                            success = true,
+                            message = "Redirect to VNPay",
+                            paymentUrl,
+                            orderId = order.OrderId,
+                            paymentMethod = "VNPay"
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Lỗi khi xử lý thanh toán VNPay cho đơn hàng {OrderId}", order.OrderId);
+                        return StatusCode(500, new
+                        {
+                            success = false,
+                            message = "Có lỗi xảy ra khi xử lý thanh toán VNPay. Vui lòng thử lại sau."
+                        });
+                    }
+                }
+
+                // 14. Trả về kết quả cho các phương thức thanh toán khác
+                return Ok(new
+                {
+                    success = true,
+                    message = "Đơn hàng đã được tạo thành công.",
+                    orderId = order.OrderId,
+                    totalAmount,
+                    shippingFee,
+                    discountAmount,
+                    paymentMethod = request.PaymentMethod,
+                    orderDetails
                 });
             }
-
-            _context.CartItems.RemoveRange(cartItems);
-            await _context.SaveChangesAsync();
-
-            return Ok(new
+            catch (Exception ex)
             {
-                Message = "Orders created successfully.",
-                Orders = orderDetailsList
-            });
+                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu tạo đơn hàng");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi xử lý đơn hàng của bạn. Vui lòng thử lại sau."
+                });
+            }
         }
 
 
+
+        //api xem đơn hàng
+        [HttpGet("order-details/{orderId}")]
+        public async Task<IActionResult> GetOrderDetails(int orderId)
+        {
+            // Get current user ID from session
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null)
+                return Unauthorized(new { message = "Not logged in." });
+
+            // Find the order with related data
+            var order = await _context.Orders
+                .Include(o => o.Restaurant)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Product)
+                .FirstOrDefaultAsync(o => o.OrderId == orderId && o.UserId == userId);
+
+            if (order == null)
+                return NotFound(new { message = "Order not found or you don't have permission to view this order." });
+
+            // Prepare the response
+            var orderDetails = order.OrderDetails.Select(od => new
+            {
+                od.ProductId,
+                ProductName = od.Product.Name,
+                od.Quantity,
+                od.Price,
+                TotalPrice = od.Quantity * od.Price,
+                ProductImage = od.Product.ImageUrl
+            }).ToList();
+
+            var response = new
+            {
+                OrderId = order.OrderId,
+                RestaurantId = order.RestaurantId,
+                RestaurantName = order.Restaurant?.Name,
+                Status = order.Status,
+                OrderDate = order.OrderDate,
+                DeliveryAddress = order.Address,
+                DistanceKm = order.DistanceKm,
+                ProductTotal = orderDetails.Sum(od => od.TotalPrice),
+                ShippingFee = order.ShipFee,
+                DiscountAmount = order.DiscountAmount,
+                TotalAmount = order.TotalAmount,
+                PaymentMethod = order.PaymentMethod,
+                PaymentStatus = order.PaymentStatus,
+                OrderDetails = orderDetails
+            };
+
+            return Ok(response);
+        }
 
 
         private decimal CalculateShippingFee(double distanceKm)
@@ -270,39 +421,78 @@ namespace KhoaLuan1.Controllers
 
 
 
-        //[HttpGet("payment-callback")]
-        //public async Task<IActionResult> PaymentCallback()
-        //{
-        //    var response = _vnPayService.PaymentExecute(Request.Query);
+        [HttpGet("vnpay-return")]
+        public async Task<IActionResult> VNPayReturn()
+        {
+            // Lấy toàn bộ query parameters từ URL
+            var queryCollection = HttpContext.Request.Query;
 
-        //    if (!response.Success)
-        //    {
-        //        return BadRequest(new { message = "Payment verification failed.", response });
-        //    }
+            // Validate signature bằng cách truyền trực tiếp IQueryCollection
+            if (!_vnPayService.ValidatePayment(queryCollection))
+            {
+                return BadRequest(new { success = false, message = "Invalid signature" });
+            }
+            var vnpResponse = queryCollection.ToDictionary(
+                k => k.Key,
+                v => v.Value.ToString());
 
-        //    // 📝 Cập nhật trạng thái đơn hàng trong DB
-        //    var order = await _context.Orders.FindAsync(response.OrderId);
-        //    if (order == null)
-        //    {
-        //        return NotFound(new { message = "Order not found." });
-        //    }
+            // Kiểm tra mã phản hồi
+            if (!vnpResponse.ContainsKey("vnp_ResponseCode") || vnpResponse["vnp_ResponseCode"] != "00")
+            {
+                var errorMessage = vnpResponse.ContainsKey("vnp_ResponseMessage")
+                    ? $"Payment failed: {vnpResponse["vnp_ResponseMessage"]}"
+                    : "Payment failed";
 
-        //    order.PaymentStatus = "Paid";
-        //    _context.Orders.Update(order);
-        //    await _context.SaveChangesAsync();
+                return BadRequest(new { success = false, message = errorMessage });
+            }
 
-        //    return Ok(new
-        //    {
-        //        message = "Payment successful.",
-        //        response
-        //    });
-        //}
+            // Lấy thông tin đơn hàng
+            if (!vnpResponse.ContainsKey("vnp_OrderInfo"))
+            {
+                return BadRequest(new { success = false, message = "Missing order information" });
+            }
+
+            var orderIdStr = vnpResponse["vnp_OrderInfo"].Split(' ').Last();
+            if (!int.TryParse(orderIdStr, out var orderId))
+            {
+                return BadRequest(new { success = false, message = "Invalid order ID format" });
+            }
+
+            // Tìm và cập nhật đơn hàng
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { success = false, message = "Order not found" });
+            }
+
+            // Cập nhật trạng thái thanh toán
+            order.PaymentStatus = "Paid";
+            order.PaymentDate = DateTime.UtcNow;
+
+            if (vnpResponse.ContainsKey("vnp_TransactionNo"))
+            {
+                order.TransactionId = vnpResponse["vnp_TransactionNo"];
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+
+                // Gửi thông báo hoặc xử lý tiếp theo nếu cần
+                await _hubContext.Clients.Group($"order-{orderId}")
+                    .SendAsync("PaymentSuccess", new { orderId = orderId });
+
+                return Redirect($"{_configuration["ClientUrl"]}/order-success/{orderId}?payment=success");
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi ở đây
+                return StatusCode(500, new { success = false, message = $"Error updating order: {ex.Message}" });
+            }
+        }
 
 
-
-
-        //API nhà hàng xác nhận đơn hàng
-
+        //nhà hàng xác nhận đơn hàng
         [HttpPost("confirm-order/{orderId}")]
         public async Task<IActionResult> ConfirmOrder(int orderId)
         {
@@ -502,7 +692,7 @@ namespace KhoaLuan1.Controllers
                 return NotFound(new { message = "Đơn hàng không tồn tại." });
             }
 
-            if (order.Status != "Delivering")
+            if (order.Status != "InDelivery")
             {
                 return BadRequest(new { message = "Trạng thái đơn hàng không hợp lệ để xác nhận giao hàng." });
             }
