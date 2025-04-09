@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
-
+import Header from "./Header";
 export default function RestaurantProductsPage() {
   const { restaurantId } = useParams();
   const [restaurant, setRestaurant] = useState(null);
@@ -60,6 +60,7 @@ export default function RestaurantProductsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+<Header/>
       {restaurant && (
         <div className="mb-8">
           <div className="flex flex-col md:flex-row gap-6">

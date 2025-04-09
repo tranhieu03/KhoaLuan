@@ -12,17 +12,21 @@ namespace KhoaLuan1.Controllers
     public class ProductController : ControllerBase
     {
         private readonly KhoaluantestContext _context;
+        private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly ILogger<ProductController> _logger;
 
-        public ProductController(KhoaluantestContext context)
+        public ProductController(
+            KhoaluantestContext context,
+            IWebHostEnvironment webHostEnvironment,
+            ILogger<ProductController> logger)
         {
             _context = context;
+            _webHostEnvironment = webHostEnvironment;
+            _logger = logger;
         }
 
-        // API Đăng bài bán hàng
-        [HttpPost("create")]
-        public async Task<IActionResult> CreateProduct([FromForm] CreateProductRequest model)
+        private async Task<ActionResult<Restaurant>> GetCurrentUserRestaurant()
         {
-            // Kiểm tra trạng thái đăng nhập
             var userId = HttpContext.Session.GetInt32("UserId");
             var role = HttpContext.Session.GetString("Role");
 
@@ -30,272 +34,308 @@ namespace KhoaLuan1.Controllers
                 return Unauthorized(new { message = "User is not logged in." });
 
             if (role != "seller")
-                return Ok(new { message = "Only sellers are allowed to post products." });
+                return BadRequest(new { message = "Only sellers are allowed to manage products." });
 
-            // Kiểm tra xem seller có nhà hàng chưa
             var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.SellerId == userId.Value);
             if (restaurant == null)
-                return BadRequest(new { message = "You need to register a restaurant before posting products." });
+                return BadRequest(new { message = "You need to register a restaurant to manage products." });
 
-            string imageUrl = null;
+            return restaurant;
+        }
 
-            // Xử lý upload ảnh
-            if (model.ImageFile != null && model.ImageFile.Length > 0)
+        [HttpPost("create")]
+        public async Task<IActionResult> CreateProduct([FromForm] CreateProductRequest model)
+        {
+            var restaurantResult = await GetCurrentUserRestaurant();
+            if (restaurantResult.Result != null) return restaurantResult.Result;
+            var restaurant = restaurantResult.Value;
+
+            // Kiểm tra bắt buộc phải có file ảnh upload
+            if (model.ImageFile == null || model.ImageFile.Length == 0)
             {
-                // Upload file ảnh
-                try
-                {
-                    var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-                    if (!Directory.Exists(uploadsFolder))
-                    {
-                        Directory.CreateDirectory(uploadsFolder);
-                    }
-
-                    var uniqueFileName = Guid.NewGuid().ToString() + "_" + model.ImageFile.FileName;
-                    var filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-                    using (var fileStream = new FileStream(filePath, FileMode.Create))
-                    {
-                        await model.ImageFile.CopyToAsync(fileStream);
-                    }
-
-                    imageUrl = $"/uploads/{uniqueFileName}";
-                }
-                catch (Exception ex)
-                {
-                    return StatusCode(500, new { message = "Error uploading image file", error = ex.Message });
-                }
-            }
-            else if (!string.IsNullOrEmpty(model.ImageUrl))
-            {
-                // Sử dụng URL ảnh trực tiếp
-                imageUrl = model.ImageUrl;
-            }
-            else
-            {
-                return BadRequest(new { message = "Either ImageFile or ImageUrl must be provided" });
+                return BadRequest(new { message = "Image file is required." });
             }
 
-            // Tạo sản phẩm mới
+            string imageUrl;
+            try
+            {
+                imageUrl = await UploadProductImage(model.ImageFile);
+                if (imageUrl == null)
+                    return BadRequest(new { message = "Failed to upload image" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error uploading product image");
+                return StatusCode(500, new { message = "Error uploading image file" });
+            }
+
             var product = new Product
             {
                 RestaurantId = restaurant.RestaurantId,
                 Name = model.Name,
                 Description = model.Description,
-                Price = model.Price,
+                Price = (decimal)model.Price,
                 ImageUrl = imageUrl,
                 StockQuantity = model.StockQuantity,
                 Status = "Active",
                 FoodCategoryId = model.FoodCategoryId
             };
-
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Product created successfully.", productId = product.ProductId });
+            return Ok(new
+            {
+                message = "Product created successfully.",
+                productId = product.ProductId
+            });
         }
 
-        // API xem danh sách sản phẩm cửa hàng đã đăng (chỉ status = "Active")
+
         [HttpGet("listsanphamcuahang")]
         public async Task<IActionResult> ListProductRes()
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+            var restaurantResult = await GetCurrentUserRestaurant();
+            if (restaurantResult.Result != null) return restaurantResult.Result;
+            var restaurant = restaurantResult.Value;
 
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "seller")
-                return BadRequest(new { message = "Only sellers are allowed to view products." });
-
-            // Kiểm tra xem seller có nhà hàng chưa
-            var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.SellerId == userId.Value);
-            if (restaurant == null)
-                return BadRequest(new { message = "You need to register a restaurant to view products." });
-
-            // Lấy danh sách sản phẩm thuộc nhà hàng (chỉ status = "Active")
             var products = await _context.Products
                 .Where(p => p.RestaurantId == restaurant.RestaurantId && p.Status == "Active")
-                .Select(p => new
+                .Select(p => new ProductViewModel
                 {
-                    p.ProductId,
-                    p.Name,
-                    p.Description,
-                    p.Price,
-                    p.ImageUrl,
-                    p.StockQuantity,
-                    p.Status
+                    ProductId = p.ProductId,
+                    Name = p.Name,
+                    Description = p.Description,
+                    Price = p.Price,
+                    ImageUrl = p.ImageUrl,
+                    StockQuantity = (int)p.StockQuantity,
+                    Status = p.Status,
+                    FoodCategoryId = p.FoodCategoryId
                 })
                 .ToListAsync();
 
             return Ok(products);
         }
 
-        // API xem danh sách sản phẩm đã xóa (status = "Deleted")
+        [HttpPut("update/{productId}")]
+        public async Task<IActionResult> UpdateProduct(int productId, [FromForm] ProductUpdateModel model)
+        {
+            var restaurantResult = await GetCurrentUserRestaurant();
+            if (restaurantResult.Result != null) return restaurantResult.Result;
+            var restaurant = restaurantResult.Value;
+
+            var product = await _context.Products
+                .FirstOrDefaultAsync(p => p.ProductId == productId && p.RestaurantId == restaurant.RestaurantId);
+
+            if (product == null)
+                return NotFound(new { message = "Product not found or you don't have permission to modify it" });
+
+            if (model.ImageFile != null)
+            {
+                if (!string.IsNullOrEmpty(product.ImageUrl))
+                    DeleteOldImage(product.ImageUrl);
+
+                var imageUrl = await UploadProductImage(model.ImageFile);
+                if (imageUrl == null)
+                    return BadRequest(new { message = "Failed to upload image" });
+
+                product.ImageUrl = imageUrl;
+            }
+
+            product.Name = model.Name ?? product.Name;
+            product.Description = model.Description ?? product.Description;
+            product.Price = model.Price ?? product.Price;
+            product.StockQuantity = model.StockQuantity ?? product.StockQuantity;
+            product.Status = model.Status ?? product.Status;
+            product.FoodCategoryId = model.FoodCategoryId ?? product.FoodCategoryId;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Product updated successfully" });
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogError(ex, "Concurrency error updating product {ProductId}", productId);
+                return StatusCode(500, new { message = "Error updating product" });
+            }
+        }
+
         [HttpGet("listsanphamdaxoa")]
         public async Task<IActionResult> ListDeletedProducts()
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+            var restaurantResult = await GetCurrentUserRestaurant();
+            if (restaurantResult.Result != null) return restaurantResult.Result;
+            var restaurant = restaurantResult.Value;
 
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "seller")
-                return BadRequest(new { message = "Only sellers are allowed to view deleted products." });
-
-            // Kiểm tra xem seller có nhà hàng chưa
-            var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.SellerId == userId.Value);
-            if (restaurant == null)
-                return BadRequest(new { message = "You need to register a restaurant to view deleted products." });
-
-            // Lấy danh sách sản phẩm đã xóa thuộc nhà hàng (status = "Deleted")
-            var deletedProducts = await _context.Products
+            var products = await _context.Products
                 .Where(p => p.RestaurantId == restaurant.RestaurantId && p.Status == "Deleted")
-                .Select(p => new
+                .Select(p => new ProductViewModel
                 {
-                    p.ProductId,
-                    p.Name,
-                    p.Description,
-                    p.Price,
-                    p.ImageUrl,
-                    p.StockQuantity,
-                    p.Status
+                    ProductId = p.ProductId,
+                    Name = p.Name,
+                    Description = p.Description,
+                    Price = p.Price,
+                    ImageUrl = p.ImageUrl,
+                    StockQuantity = (int)p.StockQuantity,
+                    Status = p.Status
                 })
                 .ToListAsync();
 
-            return Ok(deletedProducts);
+            return Ok(products);
         }
 
-        // API Xóa sản phẩm (chuyển status thành "Deleted" và xóa khỏi CartItems)
         [HttpPut("delete/{id}")]
-        public async Task<IActionResult> MarkProductAsDeleted(int id, [FromServices] ILogger<ProductController> logger)
+        public async Task<IActionResult> MarkProductAsDeleted(int id)
         {
+            var restaurantResult = await GetCurrentUserRestaurant();
+            if (restaurantResult.Result != null) return restaurantResult.Result;
+            var restaurant = restaurantResult.Value;
+
+            var product = await _context.Products
+                .FirstOrDefaultAsync(p => p.ProductId == id && p.RestaurantId == restaurant.RestaurantId);
+
+            if (product == null)
+                return NotFound(new { message = $"Product with ID {id} not found in your restaurant" });
+
+            if (product.Status == "Deleted")
+                return BadRequest(new { message = "Product is already deleted" });
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var userId = HttpContext.Session.GetInt32("UserId");
-                var role = HttpContext.Session.GetString("Role");
+                product.Status = "Deleted";
 
-                if (userId == null)
-                    return Unauthorized(new { message = "User is not logged in." });
+                var cartItems = await _context.CartItems
+                    .Where(ci => ci.ProductId == id)
+                    .ToListAsync();
 
-                if (role != "seller")
-                    return BadRequest(new { message = "Only sellers are allowed to delete products." });
-
-                var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.SellerId == userId.Value);
-                if (restaurant == null)
-                    return BadRequest(new { message = "You don't have a restaurant to manage products." });
-
-                var product = await _context.Products
-                    .FirstOrDefaultAsync(p => p.ProductId == id && p.RestaurantId == restaurant.RestaurantId);
-
-                if (product == null)
-                    return NotFound(new { message = $"Không tìm thấy sản phẩm với ID {id} trong nhà hàng của bạn" });
-
-                if (product.Status == "Deleted")
-                    return BadRequest(new { message = "Sản phẩm này đã bị xóa trước đó" });
-
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
+                foreach (var item in cartItems)
                 {
-                    product.Status = "Deleted";
-
-                    var cartItems = await _context.CartItems
-                        .Where(ci => ci.ProductId == id)
-                        .ToListAsync();
-
-                    if (cartItems.Any())
-                    {
-                        foreach (var item in cartItems)
-                        {
-                            item.Status = "Deleted";
-                        }
-                    }
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    logger.LogInformation("Đã đánh dấu sản phẩm {ProductId} và các mục giỏ hàng là 'Deleted'", id);
-                    return Ok(new
-                    {
-                        message = $"Đã đánh dấu sản phẩm {product.Name} và các mục trong giỏ hàng là 'Deleted'"
-                    });
+                    item.Status = "Deleted";
                 }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-                    logger.LogError(ex, "Lỗi khi lưu thay đổi cho sản phẩm {ProductId}", id);
-                    throw;
-                }
-            }
-            catch (DbUpdateException dbEx)
-            {
-                logger.LogError(dbEx, "Lỗi cơ sở dữ liệu khi cập nhật sản phẩm {ProductId}", id);
-                return StatusCode(500, new { message = $"Lỗi cơ sở dữ liệu: {dbEx.InnerException?.Message ?? dbEx.Message}" });
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Marked product {ProductId} as deleted", id);
+                return Ok(new { message = $"Product {product.Name} marked as deleted" });
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Lỗi không xác định khi xử lý sản phẩm {ProductId}", id);
-                return StatusCode(500, new { message = $"Lỗi server: {ex.Message}" });
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Error marking product {ProductId} as deleted", id);
+                return StatusCode(500, new { message = "Error deleting product" });
             }
         }
 
-        // API Khôi phục sản phẩm (chuyển status từ "Deleted" về "Active" và cập nhật CartItems)
         [HttpPut("restore/{id}")]
         public async Task<IActionResult> RestoreProduct(int id)
         {
+            var restaurantResult = await GetCurrentUserRestaurant();
+            if (restaurantResult.Result != null) return restaurantResult.Result;
+            var restaurant = restaurantResult.Value;
+
+            var product = await _context.Products
+                .FirstOrDefaultAsync(p => p.ProductId == id && p.RestaurantId == restaurant.RestaurantId);
+
+            if (product == null)
+                return NotFound(new { message = $"Product with ID {id} not found in your restaurant" });
+
+            if (product.Status == "Active")
+                return BadRequest(new { message = "Product is already active" });
+
             try
             {
-                var userId = HttpContext.Session.GetInt32("UserId");
-                var role = HttpContext.Session.GetString("Role");
-
-                if (userId == null)
-                    return Unauthorized(new { message = "User is not logged in." });
-
-                if (role != "seller")
-                    return BadRequest(new { message = "Only sellers are allowed to restore products." });
-
-                var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.SellerId == userId.Value);
-                if (restaurant == null)
-                    return BadRequest(new { message = "You don't have a restaurant to manage products." });
-
-                var product = await _context.Products
-                    .FirstOrDefaultAsync(p => p.ProductId == id && p.RestaurantId == restaurant.RestaurantId);
-
-                if (product == null)
-                    return NotFound(new { message = $"Không tìm thấy sản phẩm với ID {id} trong nhà hàng của bạn" });
-
-                if (product.Status == "Active")
-                    return BadRequest(new { message = "Sản phẩm này hiện đang ở trạng thái Active" });
-
-                // Cập nhật status của sản phẩm thành "Active"
                 product.Status = "Active";
 
-                // Khôi phục status của các mục trong CartItems thành "Active"
                 var cartItems = await _context.CartItems
                     .Where(ci => ci.ProductId == id && ci.Status == "Deleted")
                     .ToListAsync();
 
-                if (cartItems.Any())
+                foreach (var item in cartItems)
                 {
-                    foreach (var item in cartItems)
-                    {
-                        item.Status = "Active"; // Khôi phục trạng thái thành "Active"
-                    }
+                    item.Status = "Active";
                 }
 
                 await _context.SaveChangesAsync();
-
-                return Ok(new
-                {
-                    message = $"Đã khôi phục sản phẩm {product.Name} và các mục trong giỏ hàng về trạng thái 'Active'"
-                });
+                return Ok(new { message = $"Product {product.Name} restored successfully" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Lỗi server: {ex.Message}" });
+                _logger.LogError(ex, "Error restoring product {ProductId}", id);
+                return StatusCode(500, new { message = "Error restoring product" });
             }
         }
+
+        [HttpGet("food-categories")]
+        public async Task<IActionResult> GetAllFoodCategories()
+        {
+            try
+            {
+                var categories = await _context.FoodCategories
+                    .Select(fc => new FoodCategoryDto
+                    {
+                        FoodCategoryId = fc.FoodCategoryId,
+                        Name = fc.Name
+                    })
+                    .ToListAsync();
+
+                return Ok(categories);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting food categories");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
+        private async Task<string> UploadProductImage(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return null;
+
+            var uploadsFolder = Path.Combine(_webHostEnvironment.WebRootPath, "uploads", "products");
+            if (!Directory.Exists(uploadsFolder))
+                Directory.CreateDirectory(uploadsFolder);
+
+            var uniqueFileName = $"{Guid.NewGuid()}_{Path.GetFileName(file.FileName)}";
+            var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(fileStream);
+            }
+
+            return $"/uploads/products/{uniqueFileName}";
+        }
+
+        private void DeleteOldImage(string imageUrl)
+        {
+            if (string.IsNullOrEmpty(imageUrl)) return;
+
+            try
+            {
+                var imagePath = Path.Combine(_webHostEnvironment.WebRootPath, imageUrl.TrimStart('/'));
+                if (System.IO.File.Exists(imagePath))
+                    System.IO.File.Delete(imagePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting old image {ImageUrl}", imageUrl);
+            }
+        }
+    }
+
+    public class ProductViewModel
+    {
+        public int ProductId { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public decimal Price { get; set; }
+        public string ImageUrl { get; set; }
+        public int StockQuantity { get; set; }
+        public string Status { get; set; }
+        public int? FoodCategoryId { get; set; }
     }
 
     public class CreateProductRequest
@@ -306,19 +346,30 @@ namespace KhoaLuan1.Controllers
         public string Description { get; set; }
 
         [Required]
-        [Range(0.01, double.MaxValue)]
-        public decimal Price { get; set; }
+        public double Price { get; set; }
 
-        public IFormFile ImageFile { get; set; } // Cho upload file
-
-        public string ImageUrl { get; set; } // Cho URL ảnh
+        public IFormFile ImageFile { get; set; }
 
         [Required]
-        [Range(0, int.MaxValue)]
         public int StockQuantity { get; set; }
 
-        public int? FoodCategoryId { get; set; }
+        public int FoodCategoryId { get; set; }
     }
 
+    public class ProductUpdateModel
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
 
+        [Range(0.01, 10000)]
+        public decimal? Price { get; set; }
+
+        public IFormFile ImageFile { get; set; }
+
+        [Range(0, 10000)]
+        public int? StockQuantity { get; set; }
+
+        public string Status { get; set; }
+        public int? FoodCategoryId { get; set; }
+    }
 }

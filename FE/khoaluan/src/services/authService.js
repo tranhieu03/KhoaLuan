@@ -7,9 +7,19 @@ const axiosInstance = axios.create({
   baseURL: API_URL,
   withCredentials: true // This is crucial for session cookies
 });
-export const register = async (userData) => {
-  const response = await axios.post(`${API_URL}/register`, userData);
-  return response.data;
+export const register = async (formData) => {
+  try {
+    // We need to use FormData to handle file uploads
+    // The formData object is already prepared in the Register component
+    const response = await axios.post(`${API_URL}/register`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data", // Important for file uploads
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
 };
 
 export const verifyOtp = async (otpData) => {

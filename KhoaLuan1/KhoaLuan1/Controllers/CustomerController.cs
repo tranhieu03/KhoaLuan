@@ -23,20 +23,17 @@ namespace KhoaLuan1.Controllers
      int page = 1,
      int pageSize = 10,
      string searchTerm = "",
-     int? foodCategoryId = null,
+     int? foodCategoryId = null, // Đổi thành foodCategoryId
      decimal? minPrice = null,
      decimal? maxPrice = null,
      string sortBy = "name",
      bool sortAscending = true)
         {
-            
-            // Base query with filtering
             var query = _context.Products
                 .Include(p => p.Restaurant)
                 .Include(p => p.FoodCategory)
-                .Where(p => p.Status == "Active"); // Chỉ lấy sản phẩm active
+                .Where(p => p.Status == "Active");
 
-            // Áp dụng các bộ lọc
             if (!string.IsNullOrEmpty(searchTerm))
             {
                 query = query.Where(p =>
@@ -44,9 +41,10 @@ namespace KhoaLuan1.Controllers
                     p.Description.Contains(searchTerm));
             }
 
+            // Lọc theo ID thay vì tên
             if (foodCategoryId.HasValue)
             {
-                query = query.Where(p => p.FoodCategoryId == foodCategoryId);
+                query = query.Where(p => p.FoodCategoryId == foodCategoryId.Value);
             }
 
             if (minPrice.HasValue)
@@ -59,7 +57,7 @@ namespace KhoaLuan1.Controllers
                 query = query.Where(p => p.Price <= maxPrice);
             }
 
-            // Áp dụng sắp xếp
+            // Apply sorting
             switch (sortBy.ToLower())
             {
                 case "price":
@@ -77,15 +75,17 @@ namespace KhoaLuan1.Controllers
                         query.OrderBy(p => p.ProductId) :
                         query.OrderByDescending(p => p.ProductId);
                     break;
-                default: // Mặc định sắp xếp theo tên
+                default: // Default sort by name
                     query = sortAscending ?
                         query.OrderBy(p => p.Name) :
                         query.OrderByDescending(p => p.Name);
                     break;
             }
 
+            // Lấy tổng số sản phẩm trước
             var totalProducts = await query.CountAsync();
 
+            // Lấy danh sách sản phẩm theo trang nhưng KHÔNG xử lý URL trong truy vấn
             var products = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -95,7 +95,7 @@ namespace KhoaLuan1.Controllers
                     Name = p.Name,
                     Description = p.Description,
                     Price = p.Price,
-                    ImageUrl = p.ImageUrl,
+                    ImageUrl = p.ImageUrl, // Không xử lý URL trong LINQ query
                     StockQuantity = (int)p.StockQuantity,
                     AverageRating = p.AverageRating,
                     Restaurant = new RestaurantInfoDto
@@ -112,6 +112,12 @@ namespace KhoaLuan1.Controllers
                 })
                 .ToListAsync();
 
+            // Xử lý URL sau khi đã lấy dữ liệu từ database
+            foreach (var product in products)
+            {
+                product.ImageUrl = FormatImageUrl(product.ImageUrl);
+            }
+
             return Ok(new PaginatedResponse<ProductResponseDto>
             {
                 TotalItems = totalProducts,
@@ -122,6 +128,23 @@ namespace KhoaLuan1.Controllers
             });
         }
 
+        // Helper method to format image URLs correctly
+        private static string FormatImageUrl(string imageUrl)
+        {
+            if (string.IsNullOrEmpty(imageUrl))
+                return null;
+
+            // Check if it's already a full URL
+            if (imageUrl.StartsWith("http://") || imageUrl.StartsWith("https://"))
+                return imageUrl;
+
+            // Check if it's a local path starting with /uploads
+            if (imageUrl.StartsWith("/uploads"))
+                return $"https://localhost:44308{imageUrl}";
+
+            // Add the base path for local uploads
+            return $"https://localhost:44308/uploads/{imageUrl.TrimStart('/')}";
+        }
 
         //API Xem chi tiết cửa hàng
 

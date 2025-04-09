@@ -33,6 +33,18 @@ const ProductDetailPage = () => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
   };
 
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return "/placeholder-food.jpg";
+    
+    // Check if the image URL is a full web URL or a local path
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      return imageUrl;
+    } else {
+      // For local uploads, prepend the base URL if needed
+      return `https://localhost:44308${imageUrl}`;
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorMessage message={error} />;
   if (!product) return <div className="container mx-auto px-4 py-8">Sản phẩm không tồn tại</div>;
@@ -50,20 +62,32 @@ const ProductDetailPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <img
-            src={product.imageUrl || "/placeholder-food.jpg"}
+            src={getImageUrl(product.imageUrl)}
             alt={product.name}
             className="w-full h-96 object-cover"
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = "/placeholder-food.jpg";
+            }}
           />
         </div>
         
         <div>
           <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
           <div className="flex items-center mb-4">
-            <div className="flex items-center mr-4">
-              <Star className="h-5 w-5 text-yellow-400 fill-current" />
-              <span className="ml-1 font-medium">{product.averageRating?.toFixed(1)}</span>
-              <span className="text-gray-500 text-sm ml-2">({product.reviewCount} đánh giá)</span>
-            </div>
+            {product.averageRating ? (
+              <div className="flex items-center mr-4">
+                <Star className="h-5 w-5 text-yellow-400 fill-current" />
+                <span className="ml-1 font-medium">{product.averageRating.toFixed(1)}</span>
+                <span className="text-gray-500 text-sm ml-2">
+                  ({product.reviewStatistics?.totalReviews || 0} đánh giá)
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center mr-4">
+                <span className="text-gray-500">Chưa có đánh giá</span>
+              </div>
+            )}
             <span className="text-gray-500">Danh mục: {product.foodCategory?.name}</span>
           </div>
           
@@ -82,7 +106,29 @@ const ProductDetailPage = () => {
             >
               <p className="font-medium">{product.restaurant?.name}</p>
               <p className="text-gray-600">{product.restaurant?.address}</p>
-              <p className="text-gray-600">Điện thoại: {product.restaurant?.phoneNumber}</p>
+              {product.restaurant?.phoneNumber && (
+                <p className="text-gray-600">Điện thoại: {product.restaurant.phoneNumber}</p>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center mb-6">
+            <div className="mr-4">
+              <label className="text-gray-700 block mb-2">Số lượng:</label>
+              <div className="flex items-center">
+                <button className="bg-gray-200 px-3 py-1 rounded-l-lg">-</button>
+                <input 
+                  type="number" 
+                  className="w-16 text-center border-y border-gray-200 py-1"
+                  min="1"
+                  max={product.stockQuantity}
+                  defaultValue="1"
+                />
+                <button className="bg-gray-200 px-3 py-1 rounded-r-lg">+</button>
+              </div>
+            </div>
+            <div className="text-gray-600">
+              <p>Còn lại: {product.stockQuantity} sản phẩm</p>
             </div>
           </div>
           
@@ -92,7 +138,37 @@ const ProductDetailPage = () => {
         </div>
       </div>
       
-      {/* Phần đánh giá sản phẩm có thể thêm vào sau */}
+      {/* Phần đánh giá sản phẩm */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-bold mb-6">Đánh giá sản phẩm</h2>
+        
+        {product.reviews && product.reviews.length > 0 ? (
+          <div className="space-y-6">
+            {product.reviews.map((review, index) => (
+              <div key={index} className="bg-white p-4 rounded-lg shadow-sm">
+                <div className="flex items-center mb-2">
+                  <div className="flex">
+                    {[...Array(5)].map((_, i) => (
+                      <Star
+                        key={i}
+                        className={`h-5 w-5 ${
+                          i < review.rating ? "text-yellow-400 fill-current" : "text-gray-300"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="ml-2 font-medium">{review.userName}</span>
+                </div>
+                <p className="text-gray-700">{review.comment}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-gray-50 p-6 rounded-lg text-center">
+            <p className="text-gray-600">Chưa có đánh giá nào cho sản phẩm này.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

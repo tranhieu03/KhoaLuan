@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle, ShoppingCart, Tag, Truck, CreditCard } from 'lucide-react';
+import { CheckCircle, ShoppingCart, Tag, Truck, CreditCard, MapPin, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import Header from './Header';
@@ -13,9 +13,12 @@ const OrderPage = () => {
   const [vouchers, setVouchers] = useState([]);
   const [selectedVoucher, setSelectedVoucher] = useState('');
   const [address, setAddress] = useState('');
+  const [coordinates, setCoordinates] = useState({ latitude: null, longitude: null });
   const [paymentMethod, setPaymentMethod] = useState('COD');
   const [loading, setLoading] = useState(false);
+  const [addressLoading, setAddressLoading] = useState(false);
   const [error, setError] = useState('');
+  const [usingCurrentLocation, setUsingCurrentLocation] = useState(false);
 
   // Initialize state from navigation data
   useEffect(() => {
@@ -34,6 +37,7 @@ const OrderPage = () => {
     }
     
     fetchVouchers();
+    fetchDefaultAddress();
   }, [location]);
 
   // Fetch selected cart items details
@@ -73,6 +77,83 @@ const OrderPage = () => {
     }
   };
 
+  // Fetch user's default address
+  const fetchDefaultAddress = async () => {
+    setAddressLoading(true);
+    try {
+      const response = await axios.get(
+        "https://localhost:44308/api/Order/get-default-address",
+        { withCredentials: true }
+      );
+      
+      if (response.data.success) {
+        if (response.data.requireAddress) {
+          // User needs to provide address
+          toast.info(response.data.message);
+        } else if (response.data.address) {
+          // Set the default address from database
+          setAddress(response.data.address);
+          setCoordinates({
+            latitude: response.data.latitude,
+            longitude: response.data.longitude
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching default address:', err);
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
+  // Get current location
+  const getCurrentLocation = () => {
+    setAddressLoading(true);
+    setUsingCurrentLocation(true);
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          setCoordinates({ latitude, longitude });
+          
+          try {
+            // Send coordinates to get address
+            const response = await axios.post(
+              "https://localhost:44308/api/Order/get-user-location",
+              { latitude, longitude },
+              { withCredentials: true }
+            );
+            
+            if (response.data.success) {
+              setAddress(response.data.address);
+              toast.success("Đã lấy vị trí hiện tại thành công");
+            } else {
+              setUsingCurrentLocation(false);
+              toast.error(response.data.message);
+            }
+          } catch (err) {
+            console.error('Error getting address from coordinates:', err);
+            toast.error("Không thể lấy địa chỉ từ vị trí hiện tại");
+            setUsingCurrentLocation(false);
+          } finally {
+            setAddressLoading(false);
+          }
+        },
+        (error) => {
+          console.error('Error getting current location:', error);
+          toast.error("Không thể truy cập vị trí hiện tại. Vui lòng nhập địa chỉ thủ công.");
+          setAddressLoading(false);
+          setUsingCurrentLocation(false);
+        }
+      );
+    } else {
+      toast.error("Trình duyệt của bạn không hỗ trợ định vị.");
+      setAddressLoading(false);
+      setUsingCurrentLocation(false);
+    }
+  };
+
   // Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('vi-VN', { 
@@ -93,8 +174,8 @@ const OrderPage = () => {
       return;
     }
 
-    if (!address) {
-      toast.error('Vui lòng nhập địa chỉ giao hàng');
+    if (!address && !usingCurrentLocation) {
+      toast.error('Vui lòng nhập địa chỉ giao hàng hoặc sử dụng vị trí hiện tại');
       return;
     }
 
@@ -102,14 +183,23 @@ const OrderPage = () => {
     setError('');
 
     try {
+      // Prepare order request
+      const orderRequest = {
+        selectedCartItems: selectedItems,
+        voucherCode: selectedVoucher,
+        paymentMethod: paymentMethod,
+        address: address
+      };
+      
+      // Add coordinates if using current location
+      if (coordinates.latitude && coordinates.longitude) {
+        orderRequest.latitude = coordinates.latitude;
+        orderRequest.longitude = coordinates.longitude;
+      }
+
       const response = await axios.post(
         "https://localhost:44308/api/Order/create-order",
-        {
-          selectedCartItems: selectedItems,
-          voucherCode: selectedVoucher,
-          paymentMethod: paymentMethod,
-          address: address
-        },
+        orderRequest,
         { withCredentials: true }
       );
 
@@ -122,17 +212,20 @@ const OrderPage = () => {
       }
       
       // Redirect to order details page with the orderId
-      if (response.data.orders && response.data.orders.length > 0) {
-        // Lưu ý: 'orders' viết thường, không phải 'Orders'
-        const orderId = response.data.orders[0].orderId; // Kiểm tra xem trường có phải là orderId hay id
-        navigate(`/order-details/${orderId}`);
+      if (response.data.orderId) {
+        navigate(`/order-details/${response.data.orderId}`);
       } else {
         toast.error('Không thể xác định ID đơn hàng từ phản hồi');
         console.error('Unexpected response structure:', response.data);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Đặt hàng thất bại');
-      toast.error(err.response?.data?.message || 'Đặt hàng thất bại');
+      // Handle specific error cases
+      if (err.response?.data?.requireAddress) {
+        toast.error('Vui lòng cung cấp địa chỉ giao hàng hoặc cho phép truy cập vị trí hiện tại');
+      } else {
+        setError(err.response?.data?.message || 'Đặt hàng thất bại');
+        toast.error(err.response?.data?.message || 'Đặt hàng thất bại');
+      }
     } finally {
       setLoading(false);
     }
@@ -193,21 +286,56 @@ const OrderPage = () => {
         )}
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div>
-          <h2 className="text-lg font-semibold mb-4 flex items-center">
-            <Truck className="w-5 h-5 mr-2" />
-            Địa chỉ giao hàng
-          </h2>
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4 flex items-center">
+          <Truck className="w-5 h-5 mr-2" />
+          Địa chỉ giao hàng
+        </h2>
+        
+        <div className="mb-4">
+          <div className="flex items-center gap-2 mb-3">
+            <button 
+              onClick={getCurrentLocation}
+              disabled={addressLoading}
+              className={`px-4 py-2 rounded-lg flex items-center ${addressLoading ? 'bg-gray-300' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+            >
+              {addressLoading ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <MapPin className="w-4 h-4 mr-2" />
+              )}
+              {usingCurrentLocation ? 'Đang sử dụng vị trí hiện tại' : 'Sử dụng vị trí hiện tại'}
+            </button>
+            
+            {usingCurrentLocation && coordinates.latitude && (
+              <span className="text-sm text-green-600 flex items-center">
+                <CheckCircle className="w-4 h-4 mr-1" /> Đã lấy tọa độ thành công
+              </span>
+            )}
+          </div>
+          
           <textarea
             value={address}
-            onChange={(e) => setAddress(e.target.value)}
+            onChange={(e) => {
+              setAddress(e.target.value);
+              // If user starts typing, we're no longer using current location
+              if (usingCurrentLocation) setUsingCurrentLocation(false);
+            }}
             placeholder="Nhập địa chỉ giao hàng của bạn"
             className="w-full p-3 border rounded-lg focus:ring-blue-500 focus:border-blue-500"
             rows="3"
           />
+          
+          <p className="text-sm text-gray-500 mt-2">
+            {usingCurrentLocation ? 
+              'Sử dụng vị trí hiện tại để giao hàng chính xác hơn' : 
+              'Vui lòng nhập địa chỉ đầy đủ bao gồm số nhà, đường, phường/xã, quận/huyện, thành phố'
+            }
+          </p>
         </div>
-        
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div>
           <h2 className="text-lg font-semibold mb-4 flex items-center">
             <Tag className="w-5 h-5 mr-2" />
@@ -228,43 +356,43 @@ const OrderPage = () => {
             ))}
           </select>
         </div>
-      </div>
-      
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4 flex items-center">
-          <CreditCard className="w-5 h-5 mr-2" />
-          Phương thức thanh toán
-        </h2>
-        <div className="space-y-3">
-          <label className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="COD"
-              checked={paymentMethod === 'COD'}
-              onChange={() => setPaymentMethod('COD')}
-              className="w-5 h-5 accent-blue-600 mr-4"
-            />
-            <div>
-              <div className="font-medium">Thanh toán khi nhận hàng (COD)</div>
-              <div className="text-sm text-gray-500">Thanh toán bằng tiền mặt khi nhận hàng</div>
-            </div>
-          </label>
-          
-          <label className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="VNPay"
-              checked={paymentMethod === 'VNPay'}
-              onChange={() => setPaymentMethod('VNPay')}
-              className="w-5 h-5 accent-blue-600 mr-4"
-            />
-            <div>
-              <div className="font-medium">VNPay</div>
-              <div className="text-sm text-gray-500">Thanh toán qua VNPay</div>
-            </div>
-          </label>
+        
+        <div>
+          <h2 className="text-lg font-semibold mb-4 flex items-center">
+            <CreditCard className="w-5 h-5 mr-2" />
+            Phương thức thanh toán
+          </h2>
+          <div className="space-y-3">
+            <label className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="COD"
+                checked={paymentMethod === 'COD'}
+                onChange={() => setPaymentMethod('COD')}
+                className="w-5 h-5 accent-blue-600 mr-4"
+              />
+              <div>
+                <div className="font-medium">Thanh toán khi nhận hàng (COD)</div>
+                <div className="text-sm text-gray-500">Thanh toán bằng tiền mặt khi nhận hàng</div>
+              </div>
+            </label>
+            
+            <label className="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="VNPay"
+                checked={paymentMethod === 'VNPay'}
+                onChange={() => setPaymentMethod('VNPay')}
+                className="w-5 h-5 accent-blue-600 mr-4"
+              />
+              <div>
+                <div className="font-medium">VNPay</div>
+                <div className="text-sm text-gray-500">Thanh toán qua VNPay</div>
+              </div>
+            </label>
+          </div>
         </div>
       </div>
       

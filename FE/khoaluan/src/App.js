@@ -24,7 +24,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/seller" element={<SellerDashboard />} />
+        <Route path="/restaurant/dashboard" element={<SellerDashboard />} />
         <Route path="/all" element={<ProductListingPage />} /> {/* Thay AllProducts bằng ProductListingPage */}
         <Route path="/product/:productId" element={<ProductDetailPage />} /> {/* Thêm route cho chi tiết sản phẩm */}
         <Route path="/restaurant-products/:restaurantId" element={<RestaurantProductsPage />} />

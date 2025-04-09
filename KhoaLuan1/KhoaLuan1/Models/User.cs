@@ -25,6 +25,12 @@ public partial class User
 
     public decimal? AverageRating { get; set; }
 
+    public string? FrontIdCardImage { get; set; }
+
+    public string? BackIdCardImage { get; set; }
+
+    public string? VehicleNumber { get; set; }
+
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
 
     public virtual ICollection<Message> MessageReceivers { get; set; } = new List<Message>();

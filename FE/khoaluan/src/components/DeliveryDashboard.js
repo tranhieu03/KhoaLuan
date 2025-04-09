@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import * as signalR from '@microsoft/signalr';
-
+import DeliveryHeader from './DeliveryHeader';
 
 const DeliveryPersonDashboard = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
   const [myOrders, setMyOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('available');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [hubConnection, setHubConnection] = useState(null);
 
   // Initialize SignalR connection
@@ -18,7 +19,7 @@ const DeliveryPersonDashboard = () => {
         const connection = new signalR.HubConnectionBuilder()
           .withUrl("https://localhost:44308/notificationHub", {
             withCredentials: true,
-            skipNegotiation: false, // Important for ASP.NET Core SignalR
+            skipNegotiation: false,
             transport: signalR.HttpTransportType.WebSockets
           })
           .configureLogging(signalR.LogLevel.Information)
@@ -34,7 +35,6 @@ const DeliveryPersonDashboard = () => {
         await connection.start();
         console.log("SignalR Connected");
   
-        // Join the delivery person group
         const userId = sessionStorage.getItem("userId");
         if (userId) {
           await connection.invoke("JoinGroup", "DeliveryPersons")
@@ -134,6 +134,20 @@ const DeliveryPersonDashboard = () => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
   };
 
+  // Filter orders by status
+  const filterOrdersByStatus = (orders, status) => {
+    if (status === 'All') return orders;
+    return orders.filter(order => order.status === status);
+  };
+
+  // Get status options based on active tab
+  const getStatusOptions = () => {
+    if (activeTab === 'available') {
+      return ['All', 'ReadyForDelivery'];
+    }
+    return ['All', 'InDelivery', 'Delivered', 'Completed'];
+  };
+
   // Render order card
   const renderOrderCard = (order, isMyOrder = false) => {
     return (
@@ -143,6 +157,7 @@ const DeliveryPersonDashboard = () => {
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
             order.status === 'ReadyForDelivery' ? 'bg-yellow-100 text-yellow-800' :
             order.status === 'InDelivery' ? 'bg-blue-100 text-blue-800' :
+            order.status === 'Delivered' ? 'bg-purple-100 text-purple-800' :
             'bg-green-100 text-green-800'
           }`}>
             {order.status}
@@ -203,22 +218,44 @@ const DeliveryPersonDashboard = () => {
 
   return (
     <div className="container mx-auto p-4">
+      <DeliveryHeader/>
       <h1 className="text-2xl font-bold mb-6">Delivery Dashboard</h1>
       
       {/* Tabs */}
       <div className="flex border-b mb-6">
         <button
           className={`py-2 px-4 mr-2 ${activeTab === 'available' ? 'border-b-2 border-blue-500 font-medium text-blue-500' : 'text-gray-500'}`}
-          onClick={() => setActiveTab('available')}
+          onClick={() => {
+            setActiveTab('available');
+            setOrderStatusFilter('All');
+          }}
         >
           Available Orders
         </button>
         <button
           className={`py-2 px-4 ${activeTab === 'my-orders' ? 'border-b-2 border-blue-500 font-medium text-blue-500' : 'text-gray-500'}`}
-          onClick={() => setActiveTab('my-orders')}
+          onClick={() => {
+            setActiveTab('my-orders');
+            setOrderStatusFilter('All');
+          }}
         >
           My Orders
         </button>
+      </div>
+      
+      {/* Status Filter */}
+      <div className="mb-6">
+        <label htmlFor="statusFilter" className="mr-2 font-medium">Filter by Status:</label>
+        <select
+          id="statusFilter"
+          value={orderStatusFilter}
+          onChange={(e) => setOrderStatusFilter(e.target.value)}
+          className="border rounded px-3 py-1"
+        >
+          {getStatusOptions().map(status => (
+            <option key={status} value={status}>{status}</option>
+          ))}
+        </select>
       </div>
       
       {/* Content */}
@@ -230,12 +267,12 @@ const DeliveryPersonDashboard = () => {
         <div>
           {activeTab === 'available' && (
             <>
-              <h2 className="text-xl font-semibold mb-4">Available Orders</h2>
-              {availableOrders.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No available orders at the moment</p>
+              <h2 className="text-xl font-semibold mb-4">Available Orders ({filterOrdersByStatus(availableOrders, orderStatusFilter).length})</h2>
+              {filterOrdersByStatus(availableOrders, orderStatusFilter).length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No orders match the selected filter</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {availableOrders.map(order => renderOrderCard(order))}
+                  {filterOrdersByStatus(availableOrders, orderStatusFilter).map(order => renderOrderCard(order))}
                 </div>
               )}
               <button 
@@ -252,12 +289,12 @@ const DeliveryPersonDashboard = () => {
           
           {activeTab === 'my-orders' && (
             <>
-              <h2 className="text-xl font-semibold mb-4">My Orders</h2>
-              {myOrders.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">You haven't accepted any orders yet</p>
+              <h2 className="text-xl font-semibold mb-4">My Orders ({filterOrdersByStatus(myOrders, orderStatusFilter).length})</h2>
+              {filterOrdersByStatus(myOrders, orderStatusFilter).length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No orders match the selected filter</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-                  {myOrders.map(order => renderOrderCard(order, true))}
+                  {filterOrdersByStatus(myOrders, orderStatusFilter).map(order => renderOrderCard(order, true))}
                 </div>
               )}
               <button 

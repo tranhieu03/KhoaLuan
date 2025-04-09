@@ -67,7 +67,162 @@ namespace KhoaLuan1.Controllers
             return Ok(validVouchers);
         }
 
+        [HttpPost("get-user-location")]
+        public async Task<IActionResult> GetUserLocation([FromBody] LocationRequest request)
+        {
+            try
+            {
+                _logger.LogInformation("Bắt đầu xử lý yêu cầu lấy vị trí người dùng");
 
+                // 1. Xác thực người dùng
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
+                {
+                    _logger.LogWarning("Yêu cầu lấy vị trí bị từ chối: Người dùng chưa đăng nhập");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+                }
+
+                string address = null;
+                double latitude = 0, longitude = 0;
+
+                // 2. Kiểm tra nếu có tọa độ được gửi lên (ưu tiên cao nhất)
+                if (request.Latitude.HasValue && request.Longitude.HasValue)
+                {
+                    latitude = request.Latitude.Value;
+                    longitude = request.Longitude.Value;
+
+                    try
+                    {
+                        // Lấy địa chỉ từ tọa độ
+                        address = await _mapService.GetAddressFromCoordinates(latitude, longitude);
+                        _logger.LogInformation("Đã lấy địa chỉ từ tọa độ: {Address}", address);
+
+                        // Lưu địa chỉ này vào thông tin người dùng nếu cần
+                        var user = await _context.Users.FindAsync(userId.Value);
+                        if (user != null)
+                        {
+                            user.Address = address;
+                           
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation("Đã cập nhật địa chỉ người dùng trong database");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Không thể lấy địa chỉ từ tọa độ: {Lat}, {Lng}", latitude, longitude);
+
+                        // Lấy địa chỉ từ database nếu có
+                        var userLocationResult = await _mapService.GetUserLocation(userId);
+                        if (!string.IsNullOrEmpty(userLocationResult.address))
+                        {
+                            address = userLocationResult.address;
+                            latitude = userLocationResult.latitude;
+                            longitude = userLocationResult.longitude;
+                            _logger.LogInformation("Sử dụng địa chỉ từ database: {Address}", address);
+                        }
+                        else
+                        {
+                            // Không có địa chỉ từ tọa độ và không có địa chỉ trong database
+                            return BadRequest(new
+                            {
+                                success = false,
+                                message = "Không thể xác định địa chỉ từ vị trí hiện tại và bạn chưa có địa chỉ lưu trữ. Vui lòng nhập địa chỉ."
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    // 3. Không có tọa độ, thử lấy địa chỉ từ database
+                    var userLocationResult = await _mapService.GetUserLocation(userId);
+                    if (!string.IsNullOrEmpty(userLocationResult.address))
+                    {
+                        address = userLocationResult.address;
+                        latitude = userLocationResult.latitude;
+                        longitude = userLocationResult.longitude;
+                        _logger.LogInformation("Sử dụng địa chỉ từ database: {Address}", address);
+                    }
+                    else
+                    {
+                        // 4. Không có địa chỉ trong database, yêu cầu người dùng nhập địa chỉ
+                        return Ok(new
+                        {
+                            success = true,
+                            requireAddress = true,
+                            message = "Vui lòng nhập địa chỉ của bạn hoặc cho phép truy cập vị trí hiện tại."
+                        });
+                    }
+                }
+
+                // Trả về thông tin địa chỉ và tọa độ
+                return Ok(new
+                {
+                    success = true,
+                    address,
+                    latitude,
+                    longitude
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu lấy vị trí người dùng");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau."
+                });
+            }
+        }
+
+
+        [HttpGet("get-default-address")]
+        public async Task<IActionResult> GetDefaultAddress()
+        {
+            try
+            {
+                // 1. Xác thực người dùng
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
+                {
+                    _logger.LogWarning("Yêu cầu lấy địa chỉ mặc định bị từ chối: Người dùng chưa đăng nhập");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+                }
+
+                // 2. Thử lấy địa chỉ từ database
+                var userLocationResult = await _mapService.GetUserLocation(userId);
+
+                if (!string.IsNullOrEmpty(userLocationResult.address))
+                {
+                    // Đã có địa chỉ trong database
+                    return Ok(new
+                    {
+                        success = true,
+                        address = userLocationResult.address,
+                        latitude = userLocationResult.latitude,
+                        longitude = userLocationResult.longitude
+                    });
+                }
+                else
+                {
+                    // Không có địa chỉ trong database, yêu cầu người dùng cung cấp vị trí
+                    return Ok(new
+                    {
+                        success = true,
+                        requireAddress = true,
+                        message = "Vui lòng cung cấp vị trí hiện tại hoặc nhập địa chỉ của bạn."
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu lấy địa chỉ mặc định");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau."
+                });
+            }
+        }
 
         //API tạo đơn hàng từ giỏ hàng
         [HttpPost("create-order")]
@@ -93,11 +248,94 @@ namespace KhoaLuan1.Controllers
                 }
 
                 // 2. Xác thực địa chỉ giao hàng
-                string deliveryAddress = string.IsNullOrEmpty(request.Address) ? user.Address : request.Address;
-                if (string.IsNullOrEmpty(deliveryAddress))
+                string deliveryAddress = null;
+                double orderLat = 0, orderLng = 0;
+
+                // Thứ tự ưu tiên:
+                // 1. Địa chỉ từ request (người dùng nhập trực tiếp)
+                // 2. Tọa độ từ request (vị trí hiện tại)
+                // 3. Địa chỉ từ database của người dùng
+
+                if (!string.IsNullOrEmpty(request.Address))
                 {
+                    // 2.1 Sử dụng địa chỉ từ request
+                    deliveryAddress = request.Address;
+                    _logger.LogInformation("Sử dụng địa chỉ từ request: {Address}", deliveryAddress);
+
+                    // Lấy tọa độ từ địa chỉ
+                    try
+                    {
+                        (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+                        _logger.LogInformation("Đã lấy tọa độ từ địa chỉ: {Lat}, {Lng}", orderLat, orderLng);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
+                        return BadRequest(new { success = false, message = "Không thể xác định vị trí từ địa chỉ đã nhập. Vui lòng kiểm tra lại địa chỉ." });
+                    }
+                }
+                else if (request.Latitude.HasValue && request.Longitude.HasValue)
+                {
+                    // 2.2 Sử dụng tọa độ từ request
+                    orderLat = request.Latitude.Value;
+                    orderLng = request.Longitude.Value;
+
+                    // Lấy địa chỉ từ tọa độ
+                    try
+                    {
+                        deliveryAddress = await _mapService.GetAddressFromCoordinates(orderLat, orderLng);
+                        _logger.LogInformation("Đã lấy địa chỉ từ tọa độ: {Address}", deliveryAddress);
+
+                        // Lưu địa chỉ này vào thông tin người dùng
+                        user.Address = deliveryAddress;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Đã cập nhật địa chỉ người dùng trong database");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Không thể lấy địa chỉ từ tọa độ: {Lat}, {Lng}", orderLat, orderLng);
+                        return BadRequest(new { success = false, message = "Không thể xác định địa chỉ từ vị trí hiện tại. Vui lòng nhập địa chỉ thủ công." });
+                    }
+                }
+                else if (!string.IsNullOrEmpty(user.Address))
+                {
+                    // 2.3 Sử dụng địa chỉ từ database
+                    deliveryAddress = user.Address;
+
+                    // Kiểm tra nếu có tọa độ trong database
+                    if (!string.IsNullOrEmpty(user.Address))
+                    {
+                        (orderLat, orderLng) = await _mapService.GetCoordinates(user.Address);
+                        _logger.LogInformation("Sử dụng tọa độ từ database: {Lat}, {Lng}", orderLat, orderLng);
+                    }
+                    else
+                    {
+                        // Nếu không có tọa độ, lấy tọa độ từ địa chỉ
+                        try
+                        {
+                            (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+                            _logger.LogInformation("Đã lấy tọa độ từ địa chỉ database: {Lat}, {Lng}", orderLat, orderLng);
+
+                            // Cập nhật tọa độ vào database
+                            await _context.SaveChangesAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ database: {Address}", deliveryAddress);
+                            return BadRequest(new { success = false, message = "Không thể xác định vị trí từ địa chỉ của bạn. Vui lòng nhập địa chỉ mới." });
+                        }
+                    }
+                }
+                else
+                {
+                    // 2.4 Không có địa chỉ, yêu cầu người dùng nhập
                     _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Thiếu địa chỉ giao hàng");
-                    return BadRequest(new { success = false, message = "Vui lòng cung cấp địa chỉ giao hàng hoặc cập nhật địa chỉ trong hồ sơ." });
+                    return BadRequest(new
+                    {
+                        success = false,
+                        requireAddress = true,
+                        message = "Vui lòng cung cấp địa chỉ giao hàng hoặc cho phép truy cập vị trí hiện tại."
+                    });
                 }
 
                 // 3. Kiểm tra giỏ hàng
@@ -128,7 +366,7 @@ namespace KhoaLuan1.Controllers
                 }
 
                 // 5. Lấy tọa độ địa chỉ giao hàng
-                double orderLat, orderLng;
+                
                 try
                 {
                     _logger.LogInformation("Đang lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
@@ -903,6 +1141,8 @@ namespace KhoaLuan1.Controllers
     public class CreateOrderRequest
     {
         public string Address { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public List<int> SelectedCartItems { get; set; }
         public string PaymentMethod { get; set; }
         public string? VoucherCode { get; set; } // Thêm mã giảm giá (có thể null nếu không sử dụng)
@@ -912,6 +1152,12 @@ namespace KhoaLuan1.Controllers
     {
         [Required]
         public string Reason { get; set; }
+    }
+
+    public class LocationRequest
+    {
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
     }
 
 }

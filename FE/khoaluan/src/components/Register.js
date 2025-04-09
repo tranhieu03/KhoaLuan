@@ -10,6 +10,9 @@ function Register() {
     password: "",
     phoneNumber: "",
     role: "Customer",
+    vehicleNumber: "",
+    frontIdCardImageFile: null,
+    backIdCardImageFile: null,
   });
   const [otp, setOtp] = useState("");
   const [message, setMessage] = useState(null);
@@ -17,6 +20,10 @@ function Register() {
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleFileChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.files[0] });
   };
 
   const handleOtpChange = (e) => {
@@ -29,7 +36,26 @@ function Register() {
     setMessage(null);
     
     try {
-      const response = await register(formData);
+      // Create FormData object to handle file uploads
+      const formDataToSend = new FormData();
+      formDataToSend.append("fullName", formData.fullName);
+      formDataToSend.append("email", formData.email);
+      formDataToSend.append("password", formData.password);
+      formDataToSend.append("phoneNumber", formData.phoneNumber);
+      formDataToSend.append("role", formData.role);
+      
+      // Only append these fields if it's a delivery person
+      if (formData.role === "DeliveryPerson") {
+        formDataToSend.append("vehicleNumber", formData.vehicleNumber);
+        if (formData.frontIdCardImageFile) {
+          formDataToSend.append("frontIdCardImageFile", formData.frontIdCardImageFile);
+        }
+        if (formData.backIdCardImageFile) {
+          formDataToSend.append("backIdCardImageFile", formData.backIdCardImageFile);
+        }
+      }
+      
+      const response = await register(formDataToSend);
       setUserId(response.userId);
       setMessage(response.message);
       setStep("verify");
@@ -54,6 +80,9 @@ function Register() {
     }
   };
 
+  // Check if delivery person role is selected
+  const isDeliveryPerson = formData.role === "DeliveryPerson";
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -76,7 +105,7 @@ function Register() {
           )}
 
           {step === "register" ? (
-            <form className="space-y-6" onSubmit={handleRegister}>
+            <form className="space-y-6" onSubmit={handleRegister} encType="multipart/form-data">
               <div>
                 <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
                   Họ và tên
@@ -153,10 +182,61 @@ function Register() {
                   onChange={handleChange}
                 >
                   <option value="Customer">Khách hàng</option>
-                  <option value="Seller">Người bán</option>
+                  <option value="seller">Người bán</option>
                   <option value="DeliveryPerson">Người giao hàng</option>
                 </select>
               </div>
+
+              {/* Additional fields for Delivery Person */}
+              {isDeliveryPerson && (
+                <>
+                  <div>
+                    <label htmlFor="vehicleNumber" className="block text-sm font-medium text-gray-700">
+                      Biển số xe
+                    </label>
+                    <input
+                      id="vehicleNumber"
+                      name="vehicleNumber"
+                      type="text"
+                      required={isDeliveryPerson}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Nhập biển số xe"
+                      value={formData.vehicleNumber}
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="frontIdCardImageFile" className="block text-sm font-medium text-gray-700">
+                      Ảnh CCCD mặt trước
+                    </label>
+                    <input
+                      id="frontIdCardImageFile"
+                      name="frontIdCardImageFile"
+                      type="file"
+                      accept="image/*"
+                      required={isDeliveryPerson}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="backIdCardImageFile" className="block text-sm font-medium text-gray-700">
+                      Ảnh CCCD mặt sau
+                    </label>
+                    <input
+                      id="backIdCardImageFile"
+                      name="backIdCardImageFile"
+                      type="file"
+                      accept="image/*"
+                      required={isDeliveryPerson}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      onChange={handleFileChange}
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
                 <button

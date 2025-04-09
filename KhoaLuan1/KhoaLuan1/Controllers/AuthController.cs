@@ -23,7 +23,7 @@ namespace KhoaLuan1.Controllers
 
         // API Đăng ký
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest model)
+        public async Task<IActionResult> Register([FromForm] RegisterRequestWithFiles model)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -35,10 +35,68 @@ namespace KhoaLuan1.Controllers
 
             // Kiểm tra email đã tồn tại
             if (await _context.Users.AnyAsync(u => u.Email == model.Email))
-                return BadRequest(new { message = "Email is already in use." });
+                return BadRequest(new { message = "Email đã được sử dụng." });
+
+            // Kiểm tra thông tin bắt buộc cho DeliveryPerson
+            if (model.Role == "DeliveryPerson")
+            {
+                if (model.FrontIdCardImageFile == null || model.BackIdCardImageFile == null || string.IsNullOrEmpty(model.VehicleNumber))
+                {
+                    return BadRequest(new { message = "Người giao hàng cần phải cung cấp hình ảnh CCCD mặt trước, mặt sau và biển số xe." });
+                }
+            }
 
             try
             {
+                // Khởi tạo các đường dẫn ảnh
+                string frontIdCardImagePath = null;
+                string backIdCardImagePath = null;
+
+                // Xử lý upload ảnh nếu là DeliveryPerson
+                if (model.Role == "DeliveryPerson")
+                {
+                    // Tạo thư mục lưu ảnh nếu chưa tồn tại
+                    string uploadDirectory = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "idcards");
+                    if (!Directory.Exists(uploadDirectory))
+                    {
+                        Directory.CreateDirectory(uploadDirectory);
+                    }
+
+                    // Xử lý ảnh CCCD mặt trước
+                    if (model.FrontIdCardImageFile != null && model.FrontIdCardImageFile.Length > 0)
+                    {
+                        // Tạo tên file độc nhất
+                        string uniqueFileName = Guid.NewGuid().ToString() + "_" + model.FrontIdCardImageFile.FileName;
+                        string filePath = Path.Combine(uploadDirectory, uniqueFileName);
+
+                        // Lưu file vào thư mục
+                        using (var stream = new FileStream(filePath, FileMode.Create))
+                        {
+                            await model.FrontIdCardImageFile.CopyToAsync(stream);
+                        }
+
+                        // Lưu đường dẫn tương đối vào database
+                        frontIdCardImagePath = "/uploads/idcards/" + uniqueFileName;
+                    }
+
+                    // Xử lý ảnh CCCD mặt sau
+                    if (model.BackIdCardImageFile != null && model.BackIdCardImageFile.Length > 0)
+                    {
+                        // Tạo tên file độc nhất
+                        string uniqueFileName = Guid.NewGuid().ToString() + "_" + model.BackIdCardImageFile.FileName;
+                        string filePath = Path.Combine(uploadDirectory, uniqueFileName);
+
+                        // Lưu file vào thư mục
+                        using (var stream = new FileStream(filePath, FileMode.Create))
+                        {
+                            await model.BackIdCardImageFile.CopyToAsync(stream);
+                        }
+
+                        // Lưu đường dẫn tương đối vào database
+                        backIdCardImagePath = "/uploads/idcards/" + uniqueFileName;
+                    }
+                }
+
                 // Xác định trạng thái tài khoản ban đầu là Inactive
                 var user = new User
                 {
@@ -48,7 +106,11 @@ namespace KhoaLuan1.Controllers
                     Role = model.Role,
                     PhoneNumber = model.PhoneNumber,
                     CreatedAt = DateTime.UtcNow,
-                    Status = "Inactive"
+                    Status = "Inactive",
+                    // Thêm các trường mới
+                    FrontIdCardImage = frontIdCardImagePath,
+                    BackIdCardImage = backIdCardImagePath,
+                    VehicleNumber = model.VehicleNumber
                 };
 
                 _context.Users.Add(user);
@@ -75,10 +137,30 @@ namespace KhoaLuan1.Controllers
 
                 if (!isSent)
                 {
-                    // Nếu gửi email thất bại, xóa user và token
+                    // Nếu gửi email thất bại, xóa user và token và hình ảnh đã upload
                     _context.PasswordResetTokens.Remove(resetToken);
                     _context.Users.Remove(user);
                     await _context.SaveChangesAsync();
+
+                    // Xóa hình ảnh nếu có
+                    if (!string.IsNullOrEmpty(frontIdCardImagePath))
+                    {
+                        string fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", frontIdCardImagePath.TrimStart('/'));
+                        if (System.IO.File.Exists(fullPath))
+                        {
+                            System.IO.File.Delete(fullPath);
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(backIdCardImagePath))
+                    {
+                        string fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", backIdCardImagePath.TrimStart('/'));
+                        if (System.IO.File.Exists(fullPath))
+                        {
+                            System.IO.File.Delete(fullPath);
+                        }
+                    }
+
                     return StatusCode(500, new { message = "Gửi email thất bại. Vui lòng thử lại sau." });
                 }
 
@@ -257,6 +339,35 @@ namespace KhoaLuan1.Controllers
         }
     }
 
+    public class RegisterRequestWithFiles
+    {
+        [Required]
+        public string FullName { get; set; }
+
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; }
+
+        [Required]
+        [MinLength(6)]
+        public string Password { get; set; }
+
+        [Required]
+        public string Role { get; set; }
+
+        [Required]
+        [Phone]
+        public string PhoneNumber { get; set; }
+
+        // File upload cho CCCD mặt trước
+        public IFormFile FrontIdCardImageFile { get; set; }
+
+        // File upload cho CCCD mặt sau
+        public IFormFile BackIdCardImageFile { get; set; }
+
+        // Biển số xe
+        public string VehicleNumber { get; set; }
+    }
     public class RegisterRequest
     {
         [Required]

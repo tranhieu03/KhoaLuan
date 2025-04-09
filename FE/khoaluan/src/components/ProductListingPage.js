@@ -41,13 +41,13 @@ const ProductListingPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get("https://localhost:44308/api/Customer/food-categories");
+        const response = await axios.get("https://localhost:44308/api/Product/food-categories");
         setFoodCategories(response.data);
       } catch (err) {
         console.error("Failed to fetch categories:", err);
       }
     };
-
+  
     fetchCategories();
   }, []);
 
@@ -197,17 +197,17 @@ const ProductListingPage = () => {
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục</label>
                 <select
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={filters.foodCategoryId}
-                  onChange={(e) => handleFilterChange('foodCategoryId', e.target.value)}
-                >
-                  <option value="">Tất cả danh mục</option>
-                  {foodCategories.map(category => (
-                    <option key={category.foodCategoryId} value={category.foodCategoryId}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  value={filters.foodCategoryId}
+  onChange={(e) => handleFilterChange('foodCategoryId', e.target.value)}
+>
+  <option value="">Tất cả danh mục</option>
+  {foodCategories.map(category => (
+    <option key={category.foodCategoryId} value={category.foodCategoryId}>
+      {category.name}
+    </option>
+  ))}
+</select>
               </div>
               
               {/* Price Range */}
