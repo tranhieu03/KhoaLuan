@@ -96,8 +96,39 @@ namespace KhoaLuan1.Controllers
                 await file.CopyToAsync(stream);
             }
             return "/uploads/" + Path.GetFileName(filePath);
+        }       
+
+            // GET: api/RestaurantCheck/has-restaurant
+            [HttpGet("has-restaurant")]
+            public async Task<ActionResult<UserRestaurantCheckDto>> CheckCurrentUserHasRestaurant()
+            {
+                // Lấy userId từ session
+                if (!HttpContext.Session.TryGetValue("UserId", out var userIdBytes))
+                {
+                    return Unauthorized(new UserRestaurantCheckDto
+                    {
+                        Message = "User chưa đăng nhập"
+                    });
+                }
+
+            var userId = HttpContext.Session.GetInt32("UserId");
+
+               
+
+                // Tìm nhà hàng của user này
+                var restaurant = await _context.Restaurants
+                    .FirstOrDefaultAsync(r => r.SellerId == userId);
+
+                return Ok(new UserRestaurantCheckDto
+                {
+                    HasRestaurant = restaurant != null,
+                    RestaurantId = restaurant?.RestaurantId,
+                    RestaurantName = restaurant?.Name,
+                    RestaurantStatus = restaurant?.Status,
+                    Message = restaurant != null ? "User có nhà hàng" : "User chưa có nhà hàng"
+                });
+            }
         }
-    }
 
     public class CreateRestaurantRequest
     {
@@ -109,5 +140,14 @@ namespace KhoaLuan1.Controllers
         public IFormFile BusinessLicenseImage { get; set; }
         public double? Latitude { get; set; }  // Tùy chọn: tọa độ vĩ độ từ bản đồ
         public double? Longitude { get; set; } // Tùy chọn: tọa độ kinh độ từ bản đồ
-    }   
+    }
+
+    public class UserRestaurantCheckDto
+    {
+        public bool HasRestaurant { get; set; }
+        public int? RestaurantId { get; set; }
+        public string? RestaurantName { get; set; }
+        public string? RestaurantStatus { get; set; }
+        public string? Message { get; set; }
+    }
 }

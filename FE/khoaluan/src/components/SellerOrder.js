@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { CheckCircle, Clock, Truck, XCircle, AlertCircle } from "lucide-react";
+import RestaurantHeader from "./RestaurantHeader";
 
 // Tạo axios instance với cấu hình sẵn
 const apiClient = axios.create({
@@ -203,7 +204,9 @@ function SellerOrders() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      <RestaurantHeader/>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+        
         <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">Quản Lý Đơn Hàng</h1>
         
         {/* Filter controls */}
