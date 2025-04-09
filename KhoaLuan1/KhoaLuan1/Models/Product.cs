@@ -23,6 +23,8 @@ public partial class Product
 
     public int? FoodCategoryId { get; set; }
 
+    public decimal? AverageRating { get; set; }
+
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
 
     public virtual FoodCategory? FoodCategory { get; set; }

@@ -1,10 +1,9 @@
-﻿using KhoaLuan1.Models;
-
-namespace KhoaLuan1.Service
+﻿namespace KhoaLuan1.Service
 {
-    public interface IVnPayService
+    public interface IVNPayService
     {
-        string CreatePaymentUrl(PaymentInformationModel model, HttpContext context);
-        PaymentResponseModel PaymentExecute(IQueryCollection collections);
+        string CreatePaymentUrl(PaymentRequest request, HttpContext context);
+        bool ValidatePayment(IQueryCollection collection);
+        string GetTransactionStatus(string responseCode);
     }
 }

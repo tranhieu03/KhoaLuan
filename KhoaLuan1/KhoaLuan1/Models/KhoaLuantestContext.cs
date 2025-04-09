@@ -17,8 +17,6 @@ public partial class KhoaluantestContext : DbContext
 
     public virtual DbSet<CartItem> CartItems { get; set; }
 
-    public virtual DbSet<Driver> Drivers { get; set; }
-
     public virtual DbSet<FoodCategory> FoodCategories { get; set; }
 
     public virtual DbSet<Message> Messages { get; set; }
@@ -32,6 +30,8 @@ public partial class KhoaluantestContext : DbContext
     public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
     public virtual DbSet<Product> Products { get; set; }
+
+    public virtual DbSet<ProductReview> ProductReviews { get; set; }
 
     public virtual DbSet<Restaurant> Restaurants { get; set; }
 
@@ -52,6 +52,11 @@ public partial class KhoaluantestContext : DbContext
         {
             entity.HasKey(e => e.CartItemId).HasName("PK__CartItem__488B0B0AE6F54D37");
 
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsUnicode(false)
+                .HasDefaultValue("Active");
+
             entity.HasOne(d => d.Product).WithMany(p => p.CartItems)
                 .HasForeignKey(d => d.ProductId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -61,34 +66,6 @@ public partial class KhoaluantestContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__CartItems__UserI__31B762FC");
-        });
-
-        modelBuilder.Entity<Driver>(entity =>
-        {
-            entity.HasKey(e => e.DriverId).HasName("PK__Driver__F1B1CD04FBFCBA7D");
-
-            entity.ToTable("Driver");
-
-            entity.HasIndex(e => e.LicensePlate, "IDX_Driver_LicensePlate");
-
-            entity.HasIndex(e => e.UserId, "IDX_Driver_UserId");
-
-            entity.HasIndex(e => e.UserId, "UQ__Driver__1788CC4D0B1D8980").IsUnique();
-
-            entity.Property(e => e.BackIdCardImage).HasMaxLength(255);
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
-                .HasColumnType("datetime");
-            entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
-            entity.Property(e => e.Hometown).HasMaxLength(100);
-            entity.Property(e => e.LicensePlate).HasMaxLength(20);
-            entity.Property(e => e.Status)
-                .HasMaxLength(50)
-                .HasDefaultValue("Pending");
-
-            entity.HasOne(d => d.User).WithOne(p => p.Driver)
-                .HasForeignKey<Driver>(d => d.UserId)
-                .HasConstraintName("FK_Driver_User");
         });
 
         modelBuilder.Entity<FoodCategory>(entity =>
@@ -146,17 +123,22 @@ public partial class KhoaluantestContext : DbContext
             entity.HasKey(e => e.OrderId).HasName("PK__Orders__C3905BCF75D28AB0");
 
             entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.DiscountAmount).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.DistanceKm).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.Latitude).HasColumnType("decimal(10, 6)");
             entity.Property(e => e.Longitude).HasColumnType("decimal(10, 6)");
             entity.Property(e => e.OrderDate)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.PaymentDate).HasColumnType("datetime");
             entity.Property(e => e.PaymentMethod).HasMaxLength(50);
             entity.Property(e => e.PaymentStatus).HasMaxLength(50);
+            entity.Property(e => e.ShipFee).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .HasDefaultValue("Pending");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(10, 2)");
+            entity.Property(e => e.TransactionId).HasMaxLength(100);
 
             entity.HasOne(d => d.DeliveryPerson).WithMany(p => p.OrderDeliveryPeople)
                 .HasForeignKey(d => d.DeliveryPersonId)
@@ -216,6 +198,7 @@ public partial class KhoaluantestContext : DbContext
         {
             entity.HasKey(e => e.ProductId).HasName("PK__Products__B40CC6CD807A8870");
 
+            entity.Property(e => e.AverageRating).HasColumnType("decimal(3, 2)");
             entity.Property(e => e.ImageUrl).HasMaxLength(255);
             entity.Property(e => e.Name).HasMaxLength(100);
             entity.Property(e => e.Price).HasColumnType("decimal(10, 2)");
@@ -234,6 +217,26 @@ public partial class KhoaluantestContext : DbContext
                 .HasForeignKey(d => d.RestaurantId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Products__Restau__2EDAF651");
+        });
+
+        modelBuilder.Entity<ProductReview>(entity =>
+        {
+            entity.HasKey(e => e.ProductReviewId).HasName("PK__ProductR__396318808F1B9CA5");
+
+            entity.ToTable(tb => tb.HasTrigger("trg_UpdateProductRating"));
+
+            entity.Property(e => e.Comment).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnType("datetime");
+
+            entity.HasOne(d => d.OrderDetail).WithMany(p => p.ProductReviews)
+                .HasForeignKey(d => d.OrderDetailId)
+                .HasConstraintName("FK_ProductReview_OrderDetail");
+
+            entity.HasOne(d => d.User).WithMany(p => p.ProductReviews)
+                .HasForeignKey(d => d.UserId)
+                .HasConstraintName("FK_ProductReview_User");
         });
 
         modelBuilder.Entity<Restaurant>(entity =>
@@ -261,21 +264,22 @@ public partial class KhoaluantestContext : DbContext
 
         modelBuilder.Entity<Review>(entity =>
         {
-            entity.HasKey(e => e.ReviewId).HasName("PK__Reviews__74BC79CE7C94F8F2");
+            entity.HasKey(e => e.ReviewId).HasName("PK__Review__74BC79CEBA7C422C");
 
+            entity.ToTable(tb => tb.HasTrigger("trg_UpdateDeliveryPersonRating"));
+
+            entity.Property(e => e.Comment).HasMaxLength(1000);
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
 
             entity.HasOne(d => d.Order).WithMany(p => p.Reviews)
                 .HasForeignKey(d => d.OrderId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Reviews__OrderId__42E1EEFE");
+                .HasConstraintName("FK_Review_Order");
 
             entity.HasOne(d => d.User).WithMany(p => p.Reviews)
                 .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Reviews__UserId__41EDCAC5");
+                .HasConstraintName("FK_Review_User");
         });
 
         modelBuilder.Entity<User>(entity =>
@@ -284,10 +288,14 @@ public partial class KhoaluantestContext : DbContext
 
             entity.HasIndex(e => e.Email, "UQ__Users__A9D10534468CC25F").IsUnique();
 
+            entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.AverageRating).HasColumnType("decimal(3, 2)");
+            entity.Property(e => e.BackIdCardImage).HasMaxLength(255);
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
             entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
             entity.Property(e => e.FullName).HasMaxLength(100);
             entity.Property(e => e.PasswordHash).HasMaxLength(255);
             entity.Property(e => e.PhoneNumber)
@@ -297,6 +305,7 @@ public partial class KhoaluantestContext : DbContext
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .HasDefaultValue("Active");
+            entity.Property(e => e.VehicleNumber).HasMaxLength(20);
         });
 
         modelBuilder.Entity<Voucher>(entity =>

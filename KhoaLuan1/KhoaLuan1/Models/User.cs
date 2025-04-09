@@ -21,9 +21,17 @@ public partial class User
 
     public string Status { get; set; } = null!;
 
-    public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
+    public string? Address { get; set; }
 
-    public virtual Driver? Driver { get; set; }
+    public decimal? AverageRating { get; set; }
+
+    public string? FrontIdCardImage { get; set; }
+
+    public string? BackIdCardImage { get; set; }
+
+    public string? VehicleNumber { get; set; }
+
+    public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
 
     public virtual ICollection<Message> MessageReceivers { get; set; } = new List<Message>();
 
@@ -36,6 +44,8 @@ public partial class User
     public virtual ICollection<Order> OrderUsers { get; set; } = new List<Order>();
 
     public virtual ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
+
+    public virtual ICollection<ProductReview> ProductReviews { get; set; } = new List<ProductReview>();
 
     public virtual ICollection<Restaurant> Restaurants { get; set; } = new List<Restaurant>();
 
