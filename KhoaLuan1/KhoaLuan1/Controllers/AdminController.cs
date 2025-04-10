@@ -21,96 +21,59 @@ namespace KhoaLuan1.Controllers
 
         // 1. Xem toàn bộ tài khoản
         [HttpGet("users")]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<object>>> GetUsers()
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+            var currentUserId = HttpContext.Session.GetInt32("UserId");
+            var currentUserRole = HttpContext.Session.GetString("Role");
 
-            if (userId == null)
+            if (currentUserId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Admin")
+            if (currentUserRole != "Admin")
                 return BadRequest(new { message = "Only Admin is permitted" });
-            return await _context.Users.ToListAsync();
-        }
 
-        // 2. Xem chi tiết tài khoản
-        [HttpGet("users/{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "Admin")
-                return BadRequest(new { message = "Only Admin is permitted" });
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound("User not found!");
-            }
-            return user;
-        }
-
-        // 3. Cập nhật thông tin tài khoản
-        [HttpPut("users/{id}")]
-        public async Task<IActionResult> UpdateUser(int id, User updatedUser)
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "Admin")
-                return BadRequest(new { message = "Only Admin is permitted" });
-            if (id != updatedUser.UserId)
-            {
-                return BadRequest("User ID mismatch!");
-            }
-
-            _context.Entry(updatedUser).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.Users.Any(e => e.UserId == id))
+            var users = await _context.Users
+                .Select(u => new
                 {
-                    return NotFound("User not found!");
-                }
-                else
-                {
-                    throw;
-                }
-            }
+                    u.UserId,
+                    u.Email,
+                    u.FullName,
+                    u.PhoneNumber,
+                    u.Address,
+                    u.CreatedAt,
+                    u.Role,
+                    // Thêm trường cho DeliveryPerson
+                    AverageRating = u.Role == "DeliveryPerson" ? u.AverageRating : (decimal?)null,
+                    VehicleNumber = u.Role == "DeliveryPerson" ? u.VehicleNumber : null,
+                    FrontIdCardImage = u.Role == "DeliveryPerson" ? u.FrontIdCardImage : null,
+                    BackIdCardImage = u.Role == "DeliveryPerson" ? u.BackIdCardImage : null
+                })
+                .ToListAsync();
 
-            return NoContent();
+            return Ok(users);
         }
 
         // 4. Xóa hoặc vô hiệu hóa tài khoản
-        [HttpDelete("users/{id}")]
+        [HttpDelete("delete/{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+            var currentUserId = HttpContext.Session.GetInt32("UserId");
+            var currentUserRole = HttpContext.Session.GetString("Role");
 
-            if (userId == null)
+            if (currentUserId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Admin")
+            if (currentUserRole != "Admin")
                 return BadRequest(new { message = "Only Admin is permitted" });
+
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
                 return NotFound("User not found!");
             }
 
-            _context.Users.Remove(user);
+            // Thay vì xóa, chuyển status thành "Deleted"
+            user.Status = "Deleted";
             await _context.SaveChangesAsync();
 
             return NoContent();
@@ -120,45 +83,61 @@ namespace KhoaLuan1.Controllers
 
         // 1. Lấy danh sách tất cả đơn hàng
         [HttpGet("orders")]
-        public async Task<ActionResult<IEnumerable<Order>>> GetOrders()
+        public async Task<ActionResult<IEnumerable<object>>> GetOrders()
         {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+            var currentUserId = HttpContext.Session.GetInt32("UserId");
+            var currentUserRole = HttpContext.Session.GetString("Role");
 
-            if (userId == null)
+            if (currentUserId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Admin")
+            if (currentUserRole != "Admin")
                 return BadRequest(new { message = "Only Admin is permitted" });
-            return await _context.Orders.Include(o => o.User).ToListAsync();
+
+            var orders = await _context.Orders
+                .OrderByDescending(o => o.OrderDate)
+                .Select(o => new
+                {
+                    OrderId = o.OrderId,
+                    OrderDate = o.OrderDate,
+                    Status = o.Status,
+                    TotalAmount = o.TotalAmount,
+                    Address = o.Address,
+                    PaymentMethod = o.PaymentMethod,
+                    PaymentStatus = o.PaymentStatus,
+                    Customer = new
+                    {
+                        o.User.UserId,
+                        o.User.FullName,
+                        o.User.Email,
+                        o.User.PhoneNumber
+                    },
+                    Restaurant = new
+                    {
+                        o.Restaurant.RestaurantId,
+                        o.Restaurant.Name
+                    },
+                    DeliveryPerson = o.DeliveryPersonId != null ? new
+                    {
+                        o.DeliveryPerson.UserId,
+                        o.DeliveryPerson.FullName,
+                        o.DeliveryPerson.PhoneNumber
+                    } : null,
+                    Items = o.OrderDetails.Select(od => new
+                    {
+                        ProductId = od.ProductId,
+                        ProductName = od.Product.Name,
+                        Quantity = od.Quantity,
+                        Price = od.Price
+                    })
+                })
+                .ToListAsync();
+
+            return Ok(orders);
         }
 
         // 2. Xem chi tiết đơn hàng
-        [HttpGet("orders/{id}")]
-        public async Task<ActionResult<Order>> GetOrder(int id)
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null)
-                return Unauthorized(new { message = "User is not logged in." });
-
-            if (role != "Admin")
-                return BadRequest(new { message = "Only Admin is permitted" });
-            var order = await _context.Orders
-                .Include(o => o.User)
-                .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Product)
-                .FirstOrDefaultAsync(o => o.OrderId == id);
-
-            if (order == null)
-            {
-                return NotFound("Order not found!");
-            }
-
-            return order;
-        }
-
+       
         // 3. Cập nhật trạng thái đơn hàng
         [HttpPut("orders/{id}")]
         public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] string newStatus)
@@ -186,6 +165,43 @@ namespace KhoaLuan1.Controllers
 
         //===========================Quản lý nhà hàng========================
         // chấp nhận hoặc từ chối nhà hàng
+
+        [HttpGet("restaurants")]
+        public async Task<ActionResult<IEnumerable<object>>> GetRestaurantsWithOwners()
+        {
+            // Kiểm tra quyền admin
+            var currentUserId = HttpContext.Session.GetInt32("UserId");
+            var currentUserRole = HttpContext.Session.GetString("Role");
+
+            if (currentUserId == null)
+                return Unauthorized(new { message = "User is not logged in." });
+
+            if (currentUserRole != "Admin")
+                return BadRequest(new { message = "Only Admin is permitted" });
+
+            var restaurants = await _context.Restaurants
+                .Include(r => r.Seller) // Include thông tin người bán
+                .Select(r => new
+                {
+                    r.RestaurantId,
+                    r.Name,
+                    r.Address,
+                    r.PhoneNumber,
+                    r.Status,
+                    SellerInfo = new
+                    {
+                        r.Seller.UserId,
+                        r.Seller.FullName,
+                        r.Seller.Email,
+                        r.Seller.PhoneNumber
+                    },
+                    ProductsCount = r.Products.Count(p => p.Status == "Active")
+                })
+                .OrderByDescending(r => r.Name) // Sắp xếp theo ngày tạo mới nhất
+                .ToListAsync();
+
+            return Ok(restaurants);
+        }
         [HttpPost("approve/{restaurantId}")]
         public async Task<IActionResult> ApproveRestaurant(int restaurantId)
         {

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShoppingCart, Bell, User, LogOut, ChevronDown, Sun, Moon } from "lucide-react";
+import { 
+  Bell, User, LogOut, ChevronDown, Sun, Moon,
+  Users, ShoppingBag, FileText, Ticket, Settings
+} from "lucide-react";
 import axios from "axios";
 
-const Header = () => {
+const AdminHeader = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -15,7 +18,7 @@ const Header = () => {
   const notificationRef = useRef(null);
   const userDropdownRef = useRef(null);
 
-  // Kiểm tra theme khi component mount
+  // Check theme on component mount
   useEffect(() => {
     const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     setIsDarkMode(darkModeMediaQuery.matches);
@@ -25,7 +28,7 @@ const Header = () => {
     });
   }, []);
 
-  // Kiểm tra trạng thái đăng nhập
+  // Check login status
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -33,20 +36,24 @@ const Header = () => {
           withCredentials: true
         });
         
-        if (response.data.userId) {
+        if (response.data.userId && response.data.role === "Admin") {
           setIsLoggedIn(true);
           setUserInfo(response.data);
           fetchNotifications();
+        } else {
+          // If not admin, redirect to login
+          navigate("/admin/login");
         }
       } catch (error) {
-        console.error("Lỗi khi kiểm tra trạng thái đăng nhập:", error);
+        console.error("Error checking login status:", error);
+        navigate("/admin/login");
       }
     };
 
     checkLoginStatus();
-  }, []);
+  }, [navigate]);
 
-  // Đóng dropdown khi click bên ngoài
+  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
@@ -63,36 +70,39 @@ const Header = () => {
     };
   }, []);
 
-  // Sửa hàm fetchNotifications để thêm withCredentials
-const fetchNotifications = async () => {
-  try {
-    const response = await axios.get("https://localhost:44308/api/Notification/get-notifications", {
-      withCredentials: true  // Thêm dòng này
-    });
-    setNotifications(response.data);
-    setUnreadCount(response.data.filter(notification => !notification.isRead).length);
-  } catch (error) {
-    console.error("Lỗi khi tải thông báo:", error);
-  }
-};
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.get("https://localhost:44308/api/Notifcation/notifications", {
+        withCredentials: true
+      });
+      setNotifications(response.data);
+      setUnreadCount(response.data.filter(notification => !notification.isRead).length);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
+  };
 
   const markAllAsRead = async () => {
     try {
-      await axios.put("https://localhost:44308/api/Notification/mark-all-read");
+      await axios.put("https://localhost:44308/api/Notification/mark-all-read", {}, {
+        withCredentials: true
+      });
       setNotifications(notifications.map(notif => ({ ...notif, isRead: true })));
       setUnreadCount(0);
     } catch (error) {
-      console.error("Lỗi khi đánh dấu đã đọc:", error);
+      console.error("Error marking notifications as read:", error);
     }
   };
 
   const handleNotificationsOpen = async () => {
     if (!isNotificationsOpen && unreadCount > 0) {
       try {
-        await axios.post("https://localhost:44308/api/Notification/mark-as-read");
+        await axios.post("https://localhost:44308/api/Admin/mark-notifications-read", {}, {
+          withCredentials: true
+        });
         fetchNotifications();
       } catch (error) {
-        console.error("Lỗi khi đánh dấu đã đọc:", error);
+        console.error("Error marking notifications as read:", error);
       }
     }
     setIsNotificationsOpen(!isNotificationsOpen);
@@ -105,9 +115,9 @@ const fetchNotifications = async () => {
       });
       setIsLoggedIn(false);
       setUserInfo(null);
-      navigate("/");
+      navigate("/admin/login");
     } catch (error) {
-      console.error("Lỗi khi đăng xuất:", error);
+      console.error("Error logging out:", error);
     }
   };
 
@@ -128,18 +138,18 @@ const fetchNotifications = async () => {
   };
 
   return (
-    <header className={`bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-lg sticky top-0 z-50 transition-colors duration-300 ${isDarkMode ? 'dark:from-gray-800 dark:via-gray-700 dark:to-gray-600' : ''}`}>
+    <header className={`bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-700 shadow-lg sticky top-0 z-50 transition-colors duration-300 ${isDarkMode ? 'dark:from-gray-900 dark:via-gray-800 dark:to-gray-700' : ''}`}>
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
-          {/* Logo với animation */}
-          <Link to="/all" className="flex items-center space-x-2 group">
+          {/* Logo */}
+          <Link to="/admin/dashboard" className="flex items-center space-x-2 group">
             <div className="bg-white p-2 rounded-full group-hover:rotate-12 transition-transform duration-300">
-              <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-orange-500 rounded-full flex items-center justify-center text-white font-bold">
-                F
+              <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full flex items-center justify-center text-white font-bold">
+                A
               </div>
             </div>
-            <span className="text-xl font-bold text-white group-hover:text-yellow-200 transition-colors duration-300">
-              FoodDelight
+            <span className="text-xl font-bold text-white group-hover:text-blue-200 transition-colors duration-300">
+              Admin Dashboard
             </span>
           </Link>
 
@@ -147,7 +157,7 @@ const fetchNotifications = async () => {
           <div className="flex items-center space-x-6">
             {isLoggedIn ? (
               <>
-                {/* Thông báo */}
+                {/* Notifications */}
                 <div className="relative" ref={notificationRef}>
                   <button 
                     className="relative p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
@@ -161,7 +171,7 @@ const fetchNotifications = async () => {
                     )}
                   </button>
                   
-                  {/* Dropdown thông báo */}
+                  {/* Notifications dropdown */}
                   {isNotificationsOpen && (
                     <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden z-50 border border-gray-200 dark:border-gray-600">
                       <div className="p-3 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
@@ -199,17 +209,6 @@ const fetchNotifications = async () => {
                   )}
                 </div>
 
-                {/* Giỏ hàng */}
-                <Link 
-                  to="/cart" 
-                  className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
-                >
-                  <ShoppingCart className="h-5 w-5 text-white" />
-                  <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    3
-                  </span>
-                </Link>
-
                 {/* Dark mode toggle */}
                 <button
                   onClick={toggleDarkMode}
@@ -246,16 +245,39 @@ const fetchNotifications = async () => {
                   {isUserDropdownOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
                       <Link 
-                        to="/profile" 
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                        to="/admin/dashboard" 
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
                       >
-                        👤 Thông tin cá nhân
+                        <Users className="h-4 w-4 mr-2" />
+                        Quản lý người dùng
                       </Link>
                       <Link 
-                        to="/customer/order" 
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                        to="/admin/orders" 
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
                       >
-                        🛒 Đơn hàng của tôi
+                        <ShoppingBag className="h-4 w-4 mr-2" />
+                        Quản lý đơn hàng
+                      </Link>
+                      <Link 
+                        to="/admin/restaurants" 
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Duyệt nhà hàng
+                      </Link>
+                      <Link 
+                        to="/admin/vouchers" 
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
+                      >
+                        <Ticket className="h-4 w-4 mr-2" />
+                        Quản lý voucher
+                      </Link>
+                      <Link 
+                        to="/admin/settings" 
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Cài đặt hệ thống
                       </Link>
                       <button
                         onClick={handleLogout}
@@ -282,16 +304,10 @@ const fetchNotifications = async () => {
                   )}
                 </button>
                 <Link 
-                  to="/" 
+                  to="/admin/login" 
                   className="px-4 py-2 border-2 border-white text-white rounded-lg hover:bg-white/20 transition-colors duration-300 font-medium"
                 >
                   Đăng nhập
-                </Link>
-                <Link 
-                  to="/register" 
-                  className="px-4 py-2 bg-white text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors duration-300 font-medium shadow-md hover:shadow-lg"
-                >
-                  Đăng ký
                 </Link>
               </div>
             )}
@@ -302,4 +318,4 @@ const fetchNotifications = async () => {
   );
 };
 
-export default Header;
+export default AdminHeader;

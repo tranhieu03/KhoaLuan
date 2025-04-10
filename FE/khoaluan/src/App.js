@@ -17,6 +17,10 @@ import CreateRestaurant from "./components/Restaurant";
 import Order from "./components/Order";
 import OrderDetailsPage from "./components/OrderDetailsPage";
 import ReviewOrder from "./components/ReviewOder";
+import UserProfile from "./components/UserProfile";
+import AdminLogin from "./components/AdminLogin";
+import AdminDashboard from "./components/AdminDashboard";
+import RestaurantManagement from "./components/AdminRestaurants";
 
 function App() {
   return (
@@ -39,6 +43,10 @@ function App() {
         <Route path="/order" element={<Order />} />
         <Route path="/order-details/:orderId" element={<OrderDetailsPage />} />
         <Route path="/review-order/:orderId" element={<ReviewOrder />} />
+        <Route path="/profile" element={<UserProfile />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/restaurants" element={<RestaurantManagement />} />
       </Routes>
     </Router>
   );
