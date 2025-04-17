@@ -26,7 +26,14 @@ export const verifyOtp = async (otpData) => {
   const response = await axios.post(`${API_URL}/verify-otp`, otpData);
   return response.data;
 };
-
+export const resendOtp = async (data) => {
+  try {
+    const response = await axios.post(`${API_URL}/resend-otp`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
 export const login = async (credentials) => {
   const response = await axiosInstance.post("/login", credentials);
   return response.data;

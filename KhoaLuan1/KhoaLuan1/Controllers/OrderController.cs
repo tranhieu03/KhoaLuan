@@ -21,10 +21,11 @@ namespace KhoaLuan1.Controllers
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly VNPayService _vnPayService;
         private readonly MapService _mapService;
+        private readonly VoucherService _voucherService;
 
 
         public OrderController(KhoaluantestContext context, IHubContext<NotificationHub> hubContext,
-           VNPayService vnPayService, MapService mapService, IConfiguration configuration, ILogger<OrderController> logger)
+           VNPayService vnPayService, MapService mapService, IConfiguration configuration, ILogger<OrderController> logger, VoucherService voucherService)
         {
             _context = context;
             _hubContext = hubContext;
@@ -32,199 +33,101 @@ namespace KhoaLuan1.Controllers
             _mapService = mapService;
             _configuration = configuration;
             _logger = logger;
+            _voucherService = voucherService;
         }
+
 
         // api danh sách voucher
-
-
-        [HttpGet("valid-vouchers")]
+        [HttpGet("get-valid-vouchers")]
         public async Task<IActionResult> GetValidVouchers()
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            if (userId == null)
-                return Unauthorized(new { message = "Not logged in." });
-
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null)
-                return NotFound(new { message = "User not found." });
-
-            var validVouchers = await _context.Vouchers
-                .Include(v => v.VoucherCategory)
-                .Where(v => v.Status == "Active" &&
-                    (v.VoucherCategory.Name == "User" && v.UserId == userId ||
-                     v.VoucherCategory.Name == "Restaurant" ||
-                     v.VoucherCategory.Name == "Product"))
-                .Select(v => new
-                {
-                    v.Code,
-                    v.VoucherCategory.Name,
-                    v.DiscountAmount,
-                    v.VoucherType,
-                    v.ExpirationDate
-                })
-                .ToListAsync();
-
-            return Ok(validVouchers);
-        }
-
-        [HttpPost("get-user-location")]
-        public async Task<IActionResult> GetUserLocation([FromBody] LocationRequest request)
         {
             try
             {
-                _logger.LogInformation("Bắt đầu xử lý yêu cầu lấy vị trí người dùng");
-
-                // 1. Xác thực người dùng
                 var userId = HttpContext.Session.GetInt32("UserId");
                 if (userId == null)
-                {
-                    _logger.LogWarning("Yêu cầu lấy vị trí bị từ chối: Người dùng chưa đăng nhập");
                     return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
-                }
 
-                string address = null;
-                double latitude = 0, longitude = 0;
+                var (vouchers, errorMessage) = await _voucherService.GetValidVouchersForUser(userId.Value);
 
-                // 2. Kiểm tra nếu có tọa độ được gửi lên (ưu tiên cao nhất)
-                if (request.Latitude.HasValue && request.Longitude.HasValue)
+                if (errorMessage != null)
+                    return BadRequest(new { success = false, message = errorMessage });
+
+                // Format vouchers for response
+                var result = vouchers.Select(v => new
                 {
-                    latitude = request.Latitude.Value;
-                    longitude = request.Longitude.Value;
-
-                    try
+                    v.VoucherId,
+                    v.Code,
+                    CategoryName = v.VoucherCategory?.Name,
+                    Description = v.VoucherCategory?.Description,
+                    v.DiscountAmount,
+                    v.VoucherType,
+                    v.ExpirationDate,
+                    v.MinimumOrderAmount,
+                    v.MaximumDiscountAmount,
+                    v.UsageLimit,
+                    Conditions = v.VoucherConditions?.Select(c => new
                     {
-                        // Lấy địa chỉ từ tọa độ
-                        address = await _mapService.GetAddressFromCoordinates(latitude, longitude);
-                        _logger.LogInformation("Đã lấy địa chỉ từ tọa độ: {Address}", address);
+                        c.ConditionType,
+                        c.Field,
+                        c.Operator,
+                        c.Value
+                    })
+                }).ToList();
 
-                        // Lưu địa chỉ này vào thông tin người dùng nếu cần
-                        var user = await _context.Users.FindAsync(userId.Value);
-                        if (user != null)
-                        {
-                            user.Address = address;
-                           
-                            await _context.SaveChangesAsync();
-                            _logger.LogInformation("Đã cập nhật địa chỉ người dùng trong database");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Không thể lấy địa chỉ từ tọa độ: {Lat}, {Lng}", latitude, longitude);
+                return Ok(new { success = true, vouchers = result });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy danh sách voucher hợp lệ");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi lấy danh sách voucher. Vui lòng thử lại sau." });
+            }
+        }
 
-                        // Lấy địa chỉ từ database nếu có
-                        var userLocationResult = await _mapService.GetUserLocation(userId);
-                        if (!string.IsNullOrEmpty(userLocationResult.address))
-                        {
-                            address = userLocationResult.address;
-                            latitude = userLocationResult.latitude;
-                            longitude = userLocationResult.longitude;
-                            _logger.LogInformation("Sử dụng địa chỉ từ database: {Address}", address);
-                        }
-                        else
-                        {
-                            // Không có địa chỉ từ tọa độ và không có địa chỉ trong database
-                            return BadRequest(new
-                            {
-                                success = false,
-                                message = "Không thể xác định địa chỉ từ vị trí hiện tại và bạn chưa có địa chỉ lưu trữ. Vui lòng nhập địa chỉ."
-                            });
-                        }
-                    }
-                }
-                else
-                {
-                    // 3. Không có tọa độ, thử lấy địa chỉ từ database
-                    var userLocationResult = await _mapService.GetUserLocation(userId);
-                    if (!string.IsNullOrEmpty(userLocationResult.address))
-                    {
-                        address = userLocationResult.address;
-                        latitude = userLocationResult.latitude;
-                        longitude = userLocationResult.longitude;
-                        _logger.LogInformation("Sử dụng địa chỉ từ database: {Address}", address);
-                    }
-                    else
-                    {
-                        // 4. Không có địa chỉ trong database, yêu cầu người dùng nhập địa chỉ
-                        return Ok(new
-                        {
-                            success = true,
-                            requireAddress = true,
-                            message = "Vui lòng nhập địa chỉ của bạn hoặc cho phép truy cập vị trí hiện tại."
-                        });
-                    }
-                }
+        // Add validation endpoint for the frontend to verify vouchers before order submission
+        [HttpPost("validate-voucher")]
+        public async Task<IActionResult> ValidateVoucher([FromBody] ValidateVoucherRequest request)
+        {
+            try
+            {
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
 
-                // Trả về thông tin địa chỉ và tọa độ
+                var (isValid, validationMessage, discountAmount, voucher) =
+                    await _voucherService.ValidateVoucherForOrder(
+                        request.VoucherCode,
+                        userId.Value,
+                        request.OrderTotal,
+                        request.RestaurantId,
+                        request.ProductIds);
+
+                if (!isValid)
+                    return Ok(new { success = false, message = validationMessage });
+
                 return Ok(new
                 {
                     success = true,
-                    address,
-                    latitude,
-                    longitude
+                    message = "Mã giảm giá hợp lệ",
+                    discountAmount,
+                    voucherType = voucher.VoucherType,
+                    categoryName = voucher.VoucherCategory?.Name
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu lấy vị trí người dùng");
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "Có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau."
-                });
+                _logger.LogError(ex, "Lỗi khi xác thực voucher");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi xác thực mã giảm giá. Vui lòng thử lại sau." });
             }
         }
 
+        // DTO for validate-voucher request
+       
 
-        [HttpGet("get-default-address")]
-        public async Task<IActionResult> GetDefaultAddress()
-        {
-            try
-            {
-                // 1. Xác thực người dùng
-                var userId = HttpContext.Session.GetInt32("UserId");
-                if (userId == null)
-                {
-                    _logger.LogWarning("Yêu cầu lấy địa chỉ mặc định bị từ chối: Người dùng chưa đăng nhập");
-                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
-                }
 
-                // 2. Thử lấy địa chỉ từ database
-                var userLocationResult = await _mapService.GetUserLocation(userId);
+        // Hàm đánh giá điều kiện voucher
 
-                if (!string.IsNullOrEmpty(userLocationResult.address))
-                {
-                    // Đã có địa chỉ trong database
-                    return Ok(new
-                    {
-                        success = true,
-                        address = userLocationResult.address,
-                        latitude = userLocationResult.latitude,
-                        longitude = userLocationResult.longitude
-                    });
-                }
-                else
-                {
-                    // Không có địa chỉ trong database, yêu cầu người dùng cung cấp vị trí
-                    return Ok(new
-                    {
-                        success = true,
-                        requireAddress = true,
-                        message = "Vui lòng cung cấp vị trí hiện tại hoặc nhập địa chỉ của bạn."
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu lấy địa chỉ mặc định");
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "Có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau."
-                });
-            }
-        }
 
-        //API tạo đơn hàng từ giỏ hàng
+        //tạo đơn hàng
         [HttpPost("create-order")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
@@ -366,7 +269,7 @@ namespace KhoaLuan1.Controllers
                 }
 
                 // 5. Lấy tọa độ địa chỉ giao hàng
-                
+
                 try
                 {
                     _logger.LogInformation("Đang lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
@@ -413,50 +316,36 @@ namespace KhoaLuan1.Controllers
                 // 9. Xử lý voucher nếu có
                 if (!string.IsNullOrEmpty(request.VoucherCode))
                 {
-                    _logger.LogInformation("Đang xử lý voucher: {VoucherCode}", request.VoucherCode);
-                    appliedVoucher = await _context.Vouchers
-                        .Include(v => v.VoucherCategory)
-                        .FirstOrDefaultAsync(v => v.Code == request.VoucherCode && v.Status == "Active");
+                    _logger.LogInformation("Processing voucher: {VoucherCode}", request.VoucherCode);
 
-                    if (appliedVoucher != null)
+                    // Get product IDs for voucher validation
+                    var productIds = cartItems.Select(c => c.ProductId).ToList();
+
+                    // Validate the voucher
+                    var (isValid, validationMessage, calculatedDiscountAmount, voucher) =
+                        await _voucherService.ValidateVoucherForOrder(
+                            request.VoucherCode,
+                            userId.Value,
+                            productTotal,
+                            restaurantId,
+                            productIds);
+
+                    if (!isValid)
                     {
-                        // Validate voucher
-                        bool isValidVoucher = true;
-                        string validationMessage = string.Empty;
-
-                        if (appliedVoucher.VoucherCategory.Name == "User" && appliedVoucher.UserId != userId)
-                        {
-                            isValidVoucher = false;
-                            validationMessage = "Mã giảm giá này không thuộc về bạn.";
-                        }
-                        else if (appliedVoucher.VoucherCategory.Name == "Restaurant" && appliedVoucher.RestaurantId != restaurantId)
-                        {
-                            isValidVoucher = false;
-                            validationMessage = "Mã giảm giá này không áp dụng cho nhà hàng này.";
-                        }
-                        else if (appliedVoucher.VoucherCategory.Name == "Product" && !cartItems.Any(i => i.ProductId == appliedVoucher.ProductId))
-                        {
-                            isValidVoucher = false;
-                            validationMessage = "Mã giảm giá này không áp dụng cho các sản phẩm trong đơn hàng.";
-                        }
-
-                        if (isValidVoucher)
-                        {
-                            _logger.LogInformation("Voucher hợp lệ, đang áp dụng giảm giá");
-                            discountAmount = appliedVoucher.VoucherType == "Fixed"
-                                ? appliedVoucher.DiscountAmount
-                                : (productTotal * appliedVoucher.DiscountAmount) / 100;
-                        }
-                        else
-                        {
-                            _logger.LogWarning("Voucher không hợp lệ: {Message}", validationMessage);
-                            return BadRequest(new { success = false, message = validationMessage });
-                        }
+                        _logger.LogWarning("Voucher validation failed: {Message}", validationMessage);
+                        return BadRequest(new { success = false, message = validationMessage });
                     }
-                    else
+
+                    appliedVoucher = voucher;
+                    discountAmount = calculatedDiscountAmount;
+
+                    _logger.LogInformation("Voucher applied successfully. Discount: {DiscountAmount}", discountAmount);
+
+                    // Update voucher usage (will be saved with the order transaction)
+                    if (appliedVoucher.UsageLimit.HasValue)
                     {
-                        _logger.LogWarning("Không tìm thấy voucher có mã: {VoucherCode}", request.VoucherCode);
-                        return BadRequest(new { success = false, message = "Mã giảm giá không hợp lệ hoặc đã hết hạn." });
+                        appliedVoucher.UsageLimit--;
+                        _context.Vouchers.Update(appliedVoucher);
                     }
                 }
 
@@ -585,7 +474,164 @@ namespace KhoaLuan1.Controllers
             }
         }
 
+        [HttpPost("get-user-location")]
+        public async Task<IActionResult> GetUserLocation([FromBody] LocationRequest request)
+        {
+            try
+            {
+                _logger.LogInformation("Bắt đầu xử lý yêu cầu lấy vị trí người dùng");
 
+                // 1. Xác thực người dùng
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
+                {
+                    _logger.LogWarning("Yêu cầu lấy vị trí bị từ chối: Người dùng chưa đăng nhập");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+                }
+
+                string address = null;
+                double latitude = 0, longitude = 0;
+
+                // 2. Kiểm tra nếu có tọa độ được gửi lên (ưu tiên cao nhất)
+                if (request.Latitude.HasValue && request.Longitude.HasValue)
+                {
+                    latitude = request.Latitude.Value;
+                    longitude = request.Longitude.Value;
+
+                    try
+                    {
+                        // Lấy địa chỉ từ tọa độ
+                        address = await _mapService.GetAddressFromCoordinates(latitude, longitude);
+                        _logger.LogInformation("Đã lấy địa chỉ từ tọa độ: {Address}", address);
+
+                        // Lưu địa chỉ này vào thông tin người dùng nếu cần
+                        var user = await _context.Users.FindAsync(userId.Value);
+                        if (user != null)
+                        {
+                            user.Address = address;
+                           
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation("Đã cập nhật địa chỉ người dùng trong database");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Không thể lấy địa chỉ từ tọa độ: {Lat}, {Lng}", latitude, longitude);
+
+                        // Lấy địa chỉ từ database nếu có
+                        var userLocationResult = await _mapService.GetUserLocation(userId);
+                        if (!string.IsNullOrEmpty(userLocationResult.address))
+                        {
+                            address = userLocationResult.address;
+                            latitude = userLocationResult.latitude;
+                            longitude = userLocationResult.longitude;
+                            _logger.LogInformation("Sử dụng địa chỉ từ database: {Address}", address);
+                        }
+                        else
+                        {
+                            // Không có địa chỉ từ tọa độ và không có địa chỉ trong database
+                            return BadRequest(new
+                            {
+                                success = false,
+                                message = "Không thể xác định địa chỉ từ vị trí hiện tại và bạn chưa có địa chỉ lưu trữ. Vui lòng nhập địa chỉ."
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    // 3. Không có tọa độ, thử lấy địa chỉ từ database
+                    var userLocationResult = await _mapService.GetUserLocation(userId);
+                    if (!string.IsNullOrEmpty(userLocationResult.address))
+                    {
+                        address = userLocationResult.address;
+                        latitude = userLocationResult.latitude;
+                        longitude = userLocationResult.longitude;
+                        _logger.LogInformation("Sử dụng địa chỉ từ database: {Address}", address);
+                    }
+                    else
+                    {
+                        // 4. Không có địa chỉ trong database, yêu cầu người dùng nhập địa chỉ
+                        return Ok(new
+                        {
+                            success = true,
+                            requireAddress = true,
+                            message = "Vui lòng nhập địa chỉ của bạn hoặc cho phép truy cập vị trí hiện tại."
+                        });
+                    }
+                }
+
+                // Trả về thông tin địa chỉ và tọa độ
+                return Ok(new
+                {
+                    success = true,
+                    address,
+                    latitude,
+                    longitude
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu lấy vị trí người dùng");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau."
+                });
+            }
+        }
+
+        [HttpGet("get-default-address")]
+        public async Task<IActionResult> GetDefaultAddress()
+        {
+            try
+            {
+                // 1. Xác thực người dùng
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
+                {
+                    _logger.LogWarning("Yêu cầu lấy địa chỉ mặc định bị từ chối: Người dùng chưa đăng nhập");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+                }
+
+                // 2. Thử lấy địa chỉ từ database
+                var userLocationResult = await _mapService.GetUserLocation(userId);
+
+                if (!string.IsNullOrEmpty(userLocationResult.address))
+                {
+                    // Đã có địa chỉ trong database
+                    return Ok(new
+                    {
+                        success = true,
+                        address = userLocationResult.address,
+                        latitude = userLocationResult.latitude,
+                        longitude = userLocationResult.longitude
+                    });
+                }
+                else
+                {
+                    // Không có địa chỉ trong database, yêu cầu người dùng cung cấp vị trí
+                    return Ok(new
+                    {
+                        success = true,
+                        requireAddress = true,
+                        message = "Vui lòng cung cấp vị trí hiện tại hoặc nhập địa chỉ của bạn."
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu lấy địa chỉ mặc định");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "Có lỗi xảy ra khi xử lý yêu cầu của bạn. Vui lòng thử lại sau."
+                });
+            }
+        }
+
+        //API tạo đơn hàng từ giỏ hàng
+       
 
         //api xem đơn hàng
         [HttpGet("order-details/{orderId}")]
@@ -626,6 +672,7 @@ namespace KhoaLuan1.Controllers
                 OrderDate = order.OrderDate,
                 DeliveryAddress = order.Address,
                 DistanceKm = order.DistanceKm,
+
                 ProductTotal = orderDetails.Sum(od => od.TotalPrice),
                 ShippingFee = order.ShipFee,
                 DiscountAmount = order.DiscountAmount,
@@ -638,6 +685,407 @@ namespace KhoaLuan1.Controllers
             return Ok(response);
         }
 
+        //nhà hàng xác nhận đơn hàng
+        [HttpPost("confirm-order/{orderId}")]
+        public async Task<IActionResult> ConfirmOrder(int orderId)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null || role != "seller")
+                return Unauthorized(new { message = "Access denied." });
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null || order.Status != "Pending")
+                return BadRequest(new { message = "Invalid order status." });
+
+            // Cập nhật trạng thái đơn hàng
+            order.Status = "ReadyForDelivery";
+            await _context.SaveChangesAsync();
+            Console.WriteLine($"✅ Đơn hàng {orderId} đã cập nhật trạng thái ReadyForDelivery");
+
+            // Kiểm tra có deliveryPerson nào không
+            var deliveryPerson = await _context.Users.FirstOrDefaultAsync(u => u.Role == "DeliveryPerson");
+
+            if (deliveryPerson == null)
+            {
+                Console.WriteLine("⚠ Không tìm thấy người giao hàng nào.");
+                return Ok(new { message = "Order confirmed, but no available delivery person found." });
+            }
+
+            Console.WriteLine($"✅ Người giao hàng tìm thấy: {deliveryPerson.UserId}");
+
+            // Tạo thông báo mới
+            var notification = new Notification
+            {
+                UserId = deliveryPerson.UserId, // Gán ID hợp lệ
+                Message = $"Order #{order.OrderId} is ready for delivery!",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            try
+            {
+                _context.Notifications.Add(notification);
+                await _context.SaveChangesAsync();
+                Console.WriteLine("✅ Thông báo đã được lưu vào database.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Lỗi khi lưu thông báo: {ex.Message}");
+            }
+
+            // Gửi thông báo qua SignalR
+            try
+            {
+                await _hubContext.Clients.Group("DeliveryPersons")
+                    .SendAsync("ReceiveNotification", notification.Message);
+                Console.WriteLine("✅ Thông báo đã gửi qua SignalR.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo qua SignalR: {ex.Message}");
+            }
+
+            return Ok(new { message = "Order confirmed successfully." });
+        }
+
+        //API người giao hàng nhận đơn(chuyển trạng thái đơn)
+        [HttpPost("accept-delivery/{orderId}")]
+        public async Task<IActionResult> AcceptDelivery(int orderId, [FromBody] LocationRequest locationRequest)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null || role != "DeliveryPerson")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền nhận đơn hàng này." });
+            }
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null || order.Status != "ReadyForDelivery")
+            {
+                return BadRequest(new { message = "Đơn hàng không có sẵn để giao." });
+            }
+
+            // Kiểm tra đơn hàng đã được nhận bởi shipper khác chưa
+            if (order.DeliveryPersonId != null)
+            {
+                return BadRequest(new { message = "Đơn hàng này đã được nhận bởi shipper khác." });
+            }
+
+            // Kiểm tra và lưu vị trí hiện tại của tài xế
+            if (locationRequest == null || !locationRequest.Latitude.HasValue || !locationRequest.Longitude.HasValue)
+            {
+                return BadRequest(new { message = "Vui lòng cung cấp vị trí hiện tại để nhận đơn hàng." });
+            }
+
+            // Gán shipper và cập nhật trạng thái đơn hàng
+            order.DeliveryPersonId = userId.Value;
+            order.Status = "InDelivery";
+            await _context.SaveChangesAsync();
+
+            // Lưu vị trí ban đầu của tài xế vào bảng DeliveryTracking
+            var tracking = new DeliveryTracking
+            {
+                OrderId = orderId,
+                DeliveryPersonId = userId.Value,
+                Latitude = (decimal)locationRequest.Latitude.Value,
+                Longitude = (decimal)locationRequest.Longitude.Value,
+                TrackingTime = DateTime.UtcNow,
+                TrackingType = "Start" // Đánh dấu đây là vị trí bắt đầu
+            };
+
+            _context.DeliveryTrackings.Add(tracking);
+            await _context.SaveChangesAsync();
+
+            // 📌 Thêm thông báo vào DB
+            var notification = new Notification
+            {
+                UserId = order.UserId, // Gửi thông báo cho khách hàng
+                Message = $"Shipper đã nhận đơn hàng #{order.OrderId}.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            _context.Notifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Gửi thông báo tới khách hàng và nhà hàng qua SignalR
+            await _hubContext.Clients.User(order.UserId.ToString())
+                .SendAsync("ReceiveNotification", notification.Message);
+
+            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
+                .SendAsync("ReceiveNotification", $"Shipper đã nhận đơn hàng #{order.OrderId}.");
+
+            // Gửi vị trí ban đầu của tài xế cho khách hàng
+            await _hubContext.Clients.User(order.UserId.ToString())
+                .SendAsync("UpdateDeliveryLocation", new
+                {
+                    orderId = order.OrderId,
+                    latitude = locationRequest.Latitude.Value,
+                    longitude = locationRequest.Longitude.Value,
+                    timestamp = tracking.TrackingTime,
+                    status = "Start" // Thông báo đây là vị trí bắt đầu
+                });
+
+            return Ok(new { message = "Bạn đã nhận đơn hàng thành công." });
+        }
+
+        // API người giao hàng xác nhận đã giao hàng thành công
+        [HttpPost("confirm-delivery/{orderId}")]
+        public async Task<IActionResult> ConfirmDelivery(int orderId, [FromBody] LocationRequest locationRequest)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+            if (userId == null || role != "DeliveryPerson")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền xác nhận giao hàng." });
+            }
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { message = "Đơn hàng không tồn tại." });
+            }
+
+            if (order.Status != "InDelivery")
+            {
+                return BadRequest(new { message = "Trạng thái đơn hàng không hợp lệ để xác nhận giao hàng." });
+            }
+
+            if (order.DeliveryPersonId != userId)
+            {
+                return Unauthorized(new { message = "Bạn không phải là người giao hàng của đơn hàng này." });
+            }
+
+            // Lấy vị trí hiện tại của tài xế
+            if (locationRequest == null || !locationRequest.Latitude.HasValue || !locationRequest.Longitude.HasValue)
+            {
+                return BadRequest(new { message = "Vui lòng cung cấp vị trí hiện tại để xác nhận giao hàng." });
+            }
+
+            // Lưu vị trí giao hàng cuối cùng vào bảng DeliveryTracking
+            var tracking = new DeliveryTracking
+            {
+                OrderId = orderId,
+                DeliveryPersonId = userId.Value,
+                Latitude = (decimal)locationRequest.Latitude.Value,
+                Longitude = (decimal)locationRequest.Longitude.Value,
+                TrackingTime = DateTime.UtcNow,
+                TrackingType = "Delivered" // Đánh dấu đây là vị trí giao hàng
+            };
+
+            _context.DeliveryTrackings.Add(tracking);
+
+            // Cập nhật vị trí giao hàng cuối cùng vào đơn hàng
+            order.Latitude = (decimal)locationRequest.Latitude.Value;
+            order.Longitude = (decimal)locationRequest.Longitude.Value;
+
+            // Cập nhật thời gian giao hàng
+            order.PaymentDate = DateTime.UtcNow;
+
+            // Cập nhật trạng thái đơn hàng thành "Delivered"
+            order.Status = "Delivered";
+            await _context.SaveChangesAsync();
+
+            // Tạo thông báo cho khách hàng
+            var notificationToCustomer = new Notification
+            {
+                UserId = order.UserId,
+                Message = $"Đơn hàng #{order.OrderId} đã được giao thành công. Vui lòng xác nhận đã nhận hàng.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            // Tạo thông báo cho nhà hàng
+            var notificationToRestaurant = new Notification
+            {
+                UserId = await _context.Restaurants
+                    .Where(r => r.RestaurantId == order.RestaurantId)
+                    .Select(r => r.SellerId)
+                    .FirstOrDefaultAsync(),
+                Message = $"Đơn hàng #{order.OrderId} đã được giao thành công.",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            };
+
+            _context.Notifications.AddRange(notificationToCustomer, notificationToRestaurant);
+            await _context.SaveChangesAsync();
+
+            // Gửi thông báo qua SignalR
+            await _hubContext.Clients.User(order.UserId.ToString())
+                .SendAsync("ReceiveNotification", notificationToCustomer.Message);
+
+            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
+                .SendAsync("ReceiveNotification", notificationToRestaurant.Message);
+
+            // Gửi vị trí cuối cùng của tài xế cho khách hàng
+            await _hubContext.Clients.User(order.UserId.ToString())
+                .SendAsync("UpdateDeliveryLocation", new
+                {
+                    orderId = order.OrderId,
+                    latitude = locationRequest.Latitude.Value,
+                    longitude = locationRequest.Longitude.Value,
+                    timestamp = tracking.TrackingTime,
+                    status = "Delivered" // Thông báo đây là vị trí giao hàng
+                });
+
+            return Ok(new { message = "Xác nhận giao hàng thành công." });
+        }
+
+        [HttpGet("delivery-tracking/{orderId}")]
+        public async Task<IActionResult> GetDeliveryTracking(int orderId)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null)
+            {
+                return Unauthorized(new { message = "Bạn chưa đăng nhập." });
+            }
+
+            // Kiểm tra quyền truy cập (người dùng là khách hàng của đơn hàng hoặc nhà hàng hoặc tài xế)
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { message = "Không tìm thấy đơn hàng." });
+            }
+
+            // Kiểm tra quyền
+            var role = HttpContext.Session.GetString("Role");
+            bool hasAccess = false;
+
+            if (role == "Customer" && order.UserId == userId)
+            {
+                hasAccess = true;
+            }
+            else if (role == "seller")
+            {
+                var restaurant = await _context.Restaurants
+                    .FirstOrDefaultAsync(r => r.RestaurantId == order.RestaurantId && r.SellerId == userId);
+                hasAccess = restaurant != null;
+            }
+            else if (role == "DeliveryPerson" && order.DeliveryPersonId == userId)
+            {
+                hasAccess = true;
+            }
+
+            if (!hasAccess)
+            {
+                return Unauthorized(new { message = "Bạn không có quyền xem thông tin này." });
+            }
+
+            // Lấy danh sách các vị trí theo dõi
+            var orderInfo = await _context.Orders
+        .Where(o => o.OrderId == orderId)
+        .Include(o => o.Restaurant) // Đảm bảo lấy thông tin nhà hàng
+        .Select(o => new {
+            o.OrderId,
+            o.Status,
+            RestaurantLocation = new
+            {
+               Lattitude = o.Restaurant.Latitude.ToString().Replace(",","."),  // Giả sử đã có trong database
+                Longtitude=o.Restaurant.Longitude.ToString().Replace(",","."), // Giả sử đã có trong database
+                o.Restaurant.Name,
+                o.Restaurant.Address
+            },
+            CustomerLocation = new
+            {
+                o.Latitude,  // Vị trí giao hàng
+                o.Longitude, // Vị trí giao hàng
+                o.Address
+            }
+        })
+        .FirstOrDefaultAsync();
+
+            if (orderInfo == null)
+            {
+                return NotFound(new { message = "Không tìm thấy thông tin đơn hàng." });
+            }
+
+            // Lấy lịch sử vị trí shipper (giữ nguyên)
+            var trackingData = await _context.DeliveryTrackings
+                .Where(t => t.OrderId == orderId)
+                .OrderBy(t => t.TrackingTime)
+                .Select(t => new
+                {
+                    t.TrackingId,
+                    t.Latitude,
+                    t.Longitude,
+                    t.TrackingTime,
+                    t.TrackingType
+                })
+                .ToListAsync();
+
+            // Lấy vị trí hiện tại của shipper (vị trí mới nhất)
+            var currentPosition = trackingData.OrderByDescending(t => t.TrackingTime).FirstOrDefault();
+
+            // Trả về đầy đủ thông tin
+            return Ok(new
+            {
+                orderInfo.OrderId,
+                orderInfo.Status,
+                RestaurantLocation = orderInfo.RestaurantLocation,
+                CustomerLocation = orderInfo.CustomerLocation,
+                CurrentShipperLocation = currentPosition,
+                FullTrackingHistory = trackingData
+            });
+        }
+
+        [HttpPost("update-delivery-location")]
+        public async Task<IActionResult> UpdateDeliveryLocation([FromBody] DeliveryLocationRequest request)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+            if (userId == null || role != "DeliveryPerson")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền cập nhật vị trí giao hàng." });
+            }
+
+            if (!request.OrderId.HasValue || !request.Latitude.HasValue || !request.Longitude.HasValue)
+            {
+                return BadRequest(new { message = "Thiếu thông tin vị trí hoặc mã đơn hàng." });
+            }
+
+            var order = await _context.Orders.FindAsync(request.OrderId.Value);
+            if (order == null)
+            {
+                return NotFound(new { message = "Đơn hàng không tồn tại." });
+            }
+
+            if (order.DeliveryPersonId != userId)
+            {
+                return Unauthorized(new { message = "Bạn không phải là người giao hàng của đơn hàng này." });
+            }
+
+            if (order.Status != "InDelivery")
+            {
+                return BadRequest(new { message = "Đơn hàng không trong quá trình giao." });
+            }
+
+            // Tạo bản ghi theo dõi vị trí
+            var tracking = new DeliveryTracking
+            {
+                OrderId = request.OrderId.Value,
+                DeliveryPersonId = userId.Value,
+                Latitude = (decimal)request.Latitude.Value,
+                Longitude = (decimal)request.Longitude.Value,
+                TrackingTime = DateTime.UtcNow
+            };
+
+            _context.DeliveryTrackings.Add(tracking);
+            await _context.SaveChangesAsync();
+
+            // Gửi vị trí mới đến khách hàng qua SignalR
+            await _hubContext.Clients.User(order.UserId.ToString())
+                .SendAsync("UpdateDeliveryLocation", new
+                {
+                    orderId = order.OrderId,
+                    latitude = request.Latitude.Value,
+                    longitude = request.Longitude.Value,
+                    timestamp = tracking.TrackingTime
+                });
+
+            return Ok(new { message = "Vị trí đã được cập nhật thành công." });
+        }
 
         private decimal CalculateShippingFee(double distanceKm)
         {
@@ -655,9 +1103,6 @@ namespace KhoaLuan1.Controllers
 
             return baseFee + extraFee;
         }
-
-
-
 
         [HttpGet("vnpay-return")]
         public async Task<IActionResult> VNPayReturn()
@@ -729,127 +1174,7 @@ namespace KhoaLuan1.Controllers
             }
         }
 
-
-        //nhà hàng xác nhận đơn hàng
-        [HttpPost("confirm-order/{orderId}")]
-        public async Task<IActionResult> ConfirmOrder(int orderId)
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null || role != "seller")
-                return Unauthorized(new { message = "Access denied." });
-
-            var order = await _context.Orders.FindAsync(orderId);
-            if (order == null || order.Status != "Pending")
-                return BadRequest(new { message = "Invalid order status." });
-
-            // Cập nhật trạng thái đơn hàng
-            order.Status = "ReadyForDelivery";
-            await _context.SaveChangesAsync();
-            Console.WriteLine($"✅ Đơn hàng {orderId} đã cập nhật trạng thái ReadyForDelivery");
-
-            // Kiểm tra có deliveryPerson nào không
-            var deliveryPerson = await _context.Users.FirstOrDefaultAsync(u => u.Role == "DeliveryPerson");
-
-            if (deliveryPerson == null)
-            {
-                Console.WriteLine("⚠ Không tìm thấy người giao hàng nào.");
-                return Ok(new { message = "Order confirmed, but no available delivery person found." });
-            }
-
-            Console.WriteLine($"✅ Người giao hàng tìm thấy: {deliveryPerson.UserId}");
-
-            // Tạo thông báo mới
-            var notification = new Notification
-            {
-                UserId = deliveryPerson.UserId, // Gán ID hợp lệ
-                Message = $"Order #{order.OrderId} is ready for delivery!",
-                CreatedAt = DateTime.UtcNow
-            };
-
-            try
-            {
-                _context.Notifications.Add(notification);
-                await _context.SaveChangesAsync();
-                Console.WriteLine("✅ Thông báo đã được lưu vào database.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Lỗi khi lưu thông báo: {ex.Message}");
-            }
-
-            // Gửi thông báo qua SignalR
-            try
-            {
-                await _hubContext.Clients.Group("DeliveryPersons")
-                    .SendAsync("ReceiveNotification", notification.Message);
-                Console.WriteLine("✅ Thông báo đã gửi qua SignalR.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Lỗi khi gửi thông báo qua SignalR: {ex.Message}");
-            }
-
-            return Ok(new { message = "Order confirmed successfully." });
-        }
-
-
-
-        //API người giao hàng nhận đơn(chuyển trạng thái đơn)
-
-        [HttpPost("accept-delivery/{orderId}")]
-        public async Task<IActionResult> AcceptDelivery(int orderId)
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null || role != "DeliveryPerson")
-            {
-                return Unauthorized(new { message = "Bạn không có quyền nhận đơn hàng này." });
-            }
-
-            var order = await _context.Orders.FindAsync(orderId);
-            if (order == null || order.Status != "ReadyForDelivery")
-            {
-                return BadRequest(new { message = "Đơn hàng không có sẵn để giao." });
-            }
-
-            // Kiểm tra đơn hàng đã được nhận bởi shipper khác chưa
-            if (order.DeliveryPersonId != null)
-            {
-                return BadRequest(new { message = "Đơn hàng này đã được nhận bởi shipper khác." });
-            }
-
-            // Gán shipper và cập nhật trạng thái đơn hàng
-            order.DeliveryPersonId = userId.Value;
-            order.Status = "InDelivery";
-            await _context.SaveChangesAsync();
-
-            // 📌 Thêm thông báo vào DB
-            var notification = new Notification
-            {
-                UserId = order.UserId, // Gửi thông báo cho khách hàng
-                Message = $"Shipper đã nhận đơn hàng #{order.OrderId}.",
-                CreatedAt = DateTime.UtcNow,
-                IsRead = false
-            };
-
-            _context.Notifications.Add(notification);
-            await _context.SaveChangesAsync();
-
-            // Gửi thông báo tới nhà hàng qua SignalR
-            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
-                .SendAsync("ReceiveNotification", $"Shipper đã nhận đơn hàng #{order.OrderId}.");
-
-            return Ok(new { message = "Bạn đã nhận đơn hàng thành công." });
-        }
-
-
-
-
         //API Xem các đơn hàng đang giao hoặc đã giao của từng nhà hàng, tài xế, khách hàng
-
         [HttpGet("delivery-orders")]
         public async Task<IActionResult> GetDeliveryOrders()
         {
@@ -908,76 +1233,7 @@ namespace KhoaLuan1.Controllers
 
             return Ok(orders);
         }
-
-
-
-
-        // API người giao hàng xác nhận đã giao hàng thành công
-        [HttpPost("confirm-delivery/{orderId}")]
-        public async Task<IActionResult> ConfirmDelivery(int orderId)
-        {
-            var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
-
-            if (userId == null || role != "DeliveryPerson")
-            {
-                return Unauthorized(new { message = "Bạn không có quyền xác nhận giao hàng." });
-            }
-
-            var order = await _context.Orders.FindAsync(orderId);
-            if (order == null)
-            {
-                return NotFound(new { message = "Đơn hàng không tồn tại." });
-            }
-
-            if (order.Status != "InDelivery")
-            {
-                return BadRequest(new { message = "Trạng thái đơn hàng không hợp lệ để xác nhận giao hàng." });
-            }
-
-            if (order.DeliveryPersonId != userId)
-            {
-                return Unauthorized(new { message = "Bạn không phải là người giao hàng của đơn hàng này." });
-            }
-
-            // Cập nhật trạng thái đơn hàng thành "Delivered"
-            order.Status = "Delivered";
-            await _context.SaveChangesAsync();
-
-            // Tạo thông báo cho khách hàng
-            var notificationToCustomer = new Notification
-            {
-                UserId = order.UserId,
-                Message = $"Đơn hàng #{order.OrderId} đã được giao thành công. Vui lòng xác nhận đã nhận hàng.",
-                CreatedAt = DateTime.UtcNow,
-                IsRead = false
-            };
-
-            // Tạo thông báo cho nhà hàng
-            var notificationToRestaurant = new Notification
-            {
-                UserId = await _context.Restaurants
-                    .Where(r => r.RestaurantId == order.RestaurantId)
-                    .Select(r => r.SellerId)
-                    .FirstOrDefaultAsync(),
-                Message = $"Đơn hàng #{order.OrderId} đã được giao thành công.",
-                CreatedAt = DateTime.UtcNow,
-                IsRead = false
-            };
-
-            _context.Notifications.AddRange(notificationToCustomer, notificationToRestaurant);
-            await _context.SaveChangesAsync();
-
-            // Gửi thông báo qua SignalR
-            await _hubContext.Clients.User(order.UserId.ToString())
-                .SendAsync("ReceiveNotification", notificationToCustomer.Message);
-
-            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
-                .SendAsync("ReceiveNotification", notificationToRestaurant.Message);
-
-            return Ok(new { message = "Xác nhận giao hàng thành công." });
-        }
-
+        
         // API khách hàng xác nhận đã nhận được hàng
         [HttpPost("confirm-receipt/{orderId}")]
         public async Task<IActionResult> ConfirmReceipt(int orderId)
@@ -1133,9 +1389,6 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Đã báo cáo chưa nhận được hàng. Chúng tôi sẽ liên hệ để hỗ trợ bạn." });
         }
 
-
-
-
     }
 
     public class CreateOrderRequest
@@ -1158,6 +1411,20 @@ namespace KhoaLuan1.Controllers
     {
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
+    }
+    public class DeliveryLocationRequest
+    {
+        public int? OrderId { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+    }
+
+    public class ValidateVoucherRequest
+    {
+        public string VoucherCode { get; set; }
+        public decimal OrderTotal { get; set; }
+        public int RestaurantId { get; set; }
+        public List<int> ProductIds { get; set; }
     }
 
 }

@@ -25,6 +25,14 @@ public partial class Voucher
 
     public int? RestaurantId { get; set; }
 
+    public int? MinimumOrderAmount { get; set; }
+
+    public int? MaximumDiscountAmount { get; set; }
+
+    public int? UsageLimit { get; set; }
+
+    public string ApplyMode { get; set; } = null!;
+
     public virtual Product? Product { get; set; }
 
     public virtual Restaurant? Restaurant { get; set; }
@@ -32,4 +40,6 @@ public partial class Voucher
     public virtual User? User { get; set; }
 
     public virtual VoucherCategory? VoucherCategory { get; set; }
+
+    public virtual ICollection<VoucherCondition> VoucherConditions { get; set; } = new List<VoucherCondition>();
 }

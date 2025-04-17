@@ -1,7 +1,9 @@
 ﻿using KhoaLuan1.Models;
+using KhoaLuan1.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 namespace KhoaLuan1.Controllers
 {
@@ -11,11 +13,15 @@ namespace KhoaLuan1.Controllers
     {
         private readonly KhoaluantestContext _context;
         private readonly EmailService _emailService;
+        private readonly VoucherService _voucherService;
+        private readonly ILogger<AdminController> _logger;
 
-        public AdminController(KhoaluantestContext context, EmailService emailService)
+        public AdminController(KhoaluantestContext context, EmailService emailService, VoucherService voucherService, ILogger<AdminController> logger)
         {
             _context = context;
             _emailService= emailService;
+            _voucherService= voucherService;
+            _logger = logger;
         }
 
 
@@ -243,55 +249,481 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Restaurant rejected and email sent." });
         }
 
-        //================quản lý món ăn=========================
+        // QUản lý voucher///////
 
-        //================Quản lý voucher========================
-
-        //API thêm voucher
-// có 2 voucher type là fixed và percentage tương ứng với giảm giá trực tiếp và giảm giá theo phần trăm
-        [HttpPost("add-voucher")]
-        public IActionResult AddVoucher([FromBody] VoucherDto model)
+        [HttpGet("vouchers")]
+        public async Task<IActionResult> GetAllVouchers([FromQuery] string status = null, [FromQuery] string categoryName = null)
         {
-            if (model == null || string.IsNullOrEmpty(model.Code))
+            try
             {
-                return BadRequest("Dữ liệu không hợp lệ");
+                // Check admin permissions
+                var adminId = HttpContext.Session.GetInt32("UserId");
+                if (adminId == null)
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+
+                var user = await _context.Users.FindAsync(adminId);
+                if (user == null || user.Role != "Admin")
+                    return Unauthorized(new { success = false, message = "Bạn không có quyền truy cập chức năng này." });
+
+                // Query vouchers with filters
+                var query = _context.Vouchers
+                    .Include(v => v.VoucherCategory)
+                    .Include(v => v.VoucherConditions)
+                    .Include(v => v.Restaurant)
+                    .Include(v => v.Product)
+                    .Include(v => v.User)
+                    .AsQueryable();
+
+                // Apply filters if provided
+                if (!string.IsNullOrEmpty(status))
+                    query = query.Where(v => v.Status == status);
+
+                if (!string.IsNullOrEmpty(categoryName))
+                    query = query.Where(v => v.VoucherCategory.Name == categoryName);
+
+                var vouchers = await query.ToListAsync();
+
+                // Format vouchers for response
+                var result = vouchers.Select(v => new
+                {
+                    v.VoucherId,
+                    v.Code,
+                    v.VoucherType,
+                    v.DiscountAmount,
+                    v.MinimumOrderAmount,
+                    v.MaximumDiscountAmount,
+                    v.UsageLimit,
+                    v.ExpirationDate,
+                    v.Status,
+                    v.ApplyMode,
+                    VoucherCategory = v.VoucherCategory != null ? new { v.VoucherCategory.VoucherCategoryId, v.VoucherCategory.Name } : null,
+                    Restaurant = v.Restaurant != null ? new { v.Restaurant.RestaurantId, v.Restaurant.Name } : null,
+                    Product = v.Product != null ? new { v.Product.ProductId, v.Product.Name } : null,
+                    User = v.User != null ? new { v.User.UserId, v.User.FullName, v.User.Email } : null,
+                    Conditions = v.VoucherConditions?.Select(c => new
+                    {
+                        c.VoucherConditionId,
+                        c.ConditionType,
+                        c.Field,
+                        c.Operator,
+                        c.Value
+                    }).ToList()
+                }).ToList();
+
+                return Ok(new { success = true, vouchers = result });
             }
-
-            var voucher = new Voucher
+            catch (Exception ex)
             {
-                Code = model.Code,
-                DiscountAmount = model.DiscountAmount,
-                ExpirationDate = model.ExpirationDate,
-                Status = "Active",
-                VoucherType = model.VoucherType,
-                UserId = model.UserId,
-                ProductId = model.ProductId,
-                RestaurantId = model.RestaurantId,
-                VoucherCategoryId = model.VoucherCategoryId
-            };
-
-            _context.Vouchers.Add(voucher);
-            _context.SaveChanges();
-
-            return Ok(new { Message = "Thêm mã giảm giá thành công", VoucherId = voucher.VoucherId });
+                _logger.LogError(ex, "Lỗi khi lấy danh sách voucher");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi lấy danh sách voucher. Vui lòng thử lại sau." });
+            }
         }
 
+        // GET: api/admin/vouchers/{id}
+        [HttpGet(("voucher/{id}"))]
+        public async Task<IActionResult> GetVoucher(int id)
+        {
+            try
+            {
+                // Check admin permissions
+                var adminId = HttpContext.Session.GetInt32("UserId");
+                if (adminId == null)
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+
+                var user = await _context.Users.FindAsync(adminId);
+                if (user == null || user.Role != "Admin")
+                    return Unauthorized(new { success = false, message = "Bạn không có quyền truy cập chức năng này." });
+
+                // Get voucher with related data
+                var voucher = await _context.Vouchers
+                    .Include(v => v.VoucherCategory)
+                    .Include(v => v.VoucherConditions)
+                    .Include(v => v.Restaurant)
+                    .Include(v => v.Product)
+                    .Include(v => v.User)
+                    .FirstOrDefaultAsync(v => v.VoucherId == id);
+
+                if (voucher == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy voucher." });
+
+                // Format voucher for response
+                var result = new
+                {
+                    voucher.VoucherId,
+                    voucher.Code,
+                    voucher.VoucherType,
+                    voucher.DiscountAmount,
+                    voucher.MinimumOrderAmount,
+                    voucher.MaximumDiscountAmount,
+                    voucher.UsageLimit,
+                    voucher.ExpirationDate,
+                    voucher.Status,
+                    voucher.ApplyMode,
+                    VoucherCategory = voucher.VoucherCategory != null ? new { voucher.VoucherCategory.VoucherCategoryId, voucher.VoucherCategory.Name } : null,
+                    Restaurant = voucher.Restaurant != null ? new { voucher.Restaurant.RestaurantId, voucher.Restaurant.Name } : null,
+                    Product = voucher.Product != null ? new { voucher.Product.ProductId, voucher.Product.Name } : null,
+                    User = voucher.User != null ? new { voucher.User.UserId, voucher.User.FullName, voucher.User.Email } : null,
+                    Conditions = voucher.VoucherConditions?.Select(c => new
+                    {
+                        c.VoucherConditionId,
+                        c.ConditionType,
+                        c.Field,
+                        c.Operator,
+                        c.Value
+                    }).ToList()
+                };
+
+                return Ok(new { success = true, voucher = result });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy thông tin voucher");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi lấy thông tin voucher. Vui lòng thử lại sau." });
+            }
+        }
+
+        // POST: api/admin/vouchers
+        [HttpPost("voucher-create")]
+        public async Task<IActionResult> CreateVoucher([FromBody] VoucherCreateRequest request)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1. Kiểm tra quyền admin
+                var adminId = HttpContext.Session.GetInt32("UserId");
+                if (adminId == null)
+                {
+                    _logger.LogWarning("Unauthorized access attempt");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập với tài khoản admin." });
+                }
+
+                var adminUser = await _context.Users.FindAsync(adminId);
+                if (adminUser == null || adminUser.Role != "Admin")
+                {
+                    _logger.LogWarning("Unauthorized admin attempt by user {UserId}", adminId);
+                    return Unauthorized(new { success = false, message = "Chỉ admin mới có quyền tạo voucher." });
+                }
+
+                // 2. Validate dữ liệu cơ bản
+                if (string.IsNullOrWhiteSpace(request.Code))
+                {
+                    return BadRequest(new { success = false, message = "Mã voucher không được để trống." });
+                }
+
+                // 3. Kiểm tra trùng mã voucher
+                if (await _context.Vouchers.AnyAsync(v => v.Code == request.Code))
+                {
+                    _logger.LogInformation("Voucher code already exists: {Code}", request.Code);
+                    return BadRequest(new { success = false, message = "Mã voucher đã tồn tại trong hệ thống." });
+                }
+
+                // 4. Xử lý voucher category (tương tự script SQL)
+                int? categoryId = request.VoucherCategoryId;
+                if (categoryId.HasValue)
+                {
+                    var categoryExists = await _context.VoucherCategories
+                        .AnyAsync(c => c.VoucherCategoryId == categoryId);
+
+                    if (!categoryExists)
+                    {
+                        _logger.LogWarning("Invalid voucher category ID: {CategoryId}", categoryId);
+                        return BadRequest(new { success = false, message = "Danh mục voucher không tồn tại." });
+                    }
+                }
+
+                // 5. Tạo voucher mới (theo logic từ script SQL)
+                var voucher = new Voucher
+                {
+                    Code = request.Code.Trim(),
+                    VoucherType = request.VoucherType ?? "ShippingFee",
+                    DiscountAmount = request.DiscountAmount,
+                    MinimumOrderAmount = (int?)request.MinimumOrderAmount,
+                    MaximumDiscountAmount = (int?)(request.MaximumDiscountAmount ?? request.DiscountAmount),
+                    UsageLimit = request.UsageLimit,
+                    ExpirationDate = request.ExpirationDate,
+                    Status = "Active",
+                    ApplyMode = request.ApplyMode ?? "Individual",
+                    VoucherCategoryId = categoryId,
+                    UserId = request.UserId == 0 ? null : request.UserId,
+                    RestaurantId = request.RestaurantId == 0 ? null : request.RestaurantId,
+                    ProductId = request.ProductId == 0 ? null : request.ProductId
+
+                };
+
+                _context.Vouchers.Add(voucher);
+                await _context.SaveChangesAsync();
+
+                // 6. Xử lý điều kiện (nếu có)
+                if (request.Conditions != null && request.Conditions.Any())
+                {
+                    foreach (var condition in request.Conditions)
+                    {
+                        _context.VoucherConditions.Add(new VoucherCondition
+                        {
+                            VoucherId = voucher.VoucherId,
+                            ConditionType = condition.ConditionType,
+                            Field = condition.Field,
+                            Operator = condition.Operator,
+                            Value = condition.Value,
+                            CreatedDate = DateTime.UtcNow
+                        });
+                    }
+                    await _context.SaveChangesAsync();
+                }
+
+                await transaction.CommitAsync();
+
+                _logger.LogInformation("Voucher created successfully: {Code} (ID: {VoucherId})",
+                    voucher.Code, voucher.VoucherId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Tạo voucher thành công",
+                    voucherId = voucher.VoucherId
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                _logger.LogError(ex, "Lỗi khi tạo voucher. Request: {@Request}", request);
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = $"Lỗi hệ thống: {ex.Message}"
+                });
+            }
+        }
+        // PUT: api/admin/vouchers/{id}
+        [HttpPut("voucher-update{id}")]
+        public async Task<IActionResult> UpdateVoucher(int id, [FromBody] VoucherUpdateRequest request)
+        {
+            try
+            {
+                // Check admin permissions
+                var adminId = HttpContext.Session.GetInt32("UserId");
+                if (adminId == null)
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+
+                var user = await _context.Users.FindAsync(adminId);
+                if (user == null || user.Role != "Admin")
+                    return Unauthorized(new { success = false, message = "Bạn không có quyền truy cập chức năng này." });
+
+                // Find voucher
+                var voucher = await _context.Vouchers
+                    .Include(v => v.VoucherConditions)
+                    .FirstOrDefaultAsync(v => v.VoucherId == id);
+
+                if (voucher == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy voucher." });
+
+                // Check if new code conflicts with existing codes (but allow same code as current)
+                if (!string.IsNullOrWhiteSpace(request.Code) && request.Code != voucher.Code)
+                {
+                    var existingCode = await _context.Vouchers.AnyAsync(v => v.Code == request.Code && v.VoucherId != id);
+                    if (existingCode)
+                        return BadRequest(new { success = false, message = "Mã voucher đã tồn tại." });
+                    voucher.Code = request.Code;
+                }
+
+                // Update voucher properties
+                if (!string.IsNullOrWhiteSpace(request.VoucherType))
+                    voucher.VoucherType = request.VoucherType;
+
+                if (request.DiscountAmount.HasValue)
+                    voucher.DiscountAmount = request.DiscountAmount.Value;
+
+                if (request.MinimumOrderAmount.HasValue)
+                    voucher.MinimumOrderAmount = (int)request.MinimumOrderAmount;
+
+                if (request.MaximumDiscountAmount.HasValue)
+                    voucher.MaximumDiscountAmount = (int)request.MaximumDiscountAmount;
+
+                if (request.UsageLimit.HasValue)
+                    voucher.UsageLimit = request.UsageLimit;
+
+                if (request.ExpirationDate.HasValue)
+                    voucher.ExpirationDate = request.ExpirationDate.Value;
+
+                if (!string.IsNullOrWhiteSpace(request.Status))
+                    voucher.Status = request.Status;
+
+                if (!string.IsNullOrWhiteSpace(request.ApplyMode))
+                    voucher.ApplyMode = request.ApplyMode;
+
+                voucher.VoucherCategoryId = request.VoucherCategoryId;
+                voucher.RestaurantId = request.RestaurantId;
+                voucher.ProductId = request.ProductId;
+                voucher.UserId = request.UserId;
+
+                // Handle conditions update
+                if (request.UpdateConditions && request.Conditions != null)
+                {
+                    // Remove existing conditions
+                    _context.VoucherConditions.RemoveRange(voucher.VoucherConditions);
+
+                    // Add new conditions
+                    foreach (var condition in request.Conditions)
+                    {
+                        var voucherCondition = new VoucherCondition
+                        {
+                            VoucherId = voucher.VoucherId,
+                            ConditionType = condition.ConditionType,
+                            Field = condition.Field,
+                            Operator = condition.Operator,
+                            Value = condition.Value,
+                            CreatedDate = DateTime.UtcNow,
+                            UpdatedDate = DateTime.UtcNow
+                        };
+
+                        _context.VoucherConditions.Add(voucherCondition);
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { success = true, message = "Cập nhật voucher thành công" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi cập nhật voucher");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi cập nhật voucher. Vui lòng thử lại sau." });
+            }
+        }
+
+        // DELETE: api/admin/vouchers/{id}
+        [HttpDelete("voucher-delete/{id}")]
+        public async Task<IActionResult> DeleteVoucher(int id)
+        {
+            try
+            {
+                // Check admin permissions
+                var adminId = HttpContext.Session.GetInt32("UserId");
+                if (adminId == null)
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+
+                var user = await _context.Users.FindAsync(adminId);
+                if (user == null || user.Role != "Admin")
+                    return Unauthorized(new { success = false, message = "Bạn không có quyền truy cập chức năng này." });
+
+                // Find voucher
+                var voucher = await _context.Vouchers
+                    .Include(v => v.VoucherConditions)
+                    .FirstOrDefaultAsync(v => v.VoucherId == id);
+
+                if (voucher == null)
+                    return NotFound(new { success = false, message = "Không tìm thấy voucher." });
+
+                // Remove conditions first
+                if (voucher.VoucherConditions != null && voucher.VoucherConditions.Any())
+                {
+                    _context.VoucherConditions.RemoveRange(voucher.VoucherConditions);
+                }
+
+                // Then remove voucher
+                _context.Vouchers.Remove(voucher);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { success = true, message = "Xóa voucher thành công" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi xóa voucher");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi xóa voucher. Vui lòng thử lại sau." });
+            }
+        }
+
+        // GET: api/admin/vouchers/categories
+        [HttpGet("categories")]
+        public async Task<IActionResult> GetVoucherCategories()
+        {
+            try
+            {
+                // Check admin permissions
+                var adminId = HttpContext.Session.GetInt32("UserId");
+                if (adminId == null)
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
+
+                var user = await _context.Users.FindAsync(adminId);
+                if (user == null || user.Role != "Admin")
+                    return Unauthorized(new { success = false, message = "Bạn không có quyền truy cập chức năng này." });
+
+                var categories = await _context.VoucherCategories.ToListAsync();
+                var result = categories.Select(c => new
+                {
+                    c.VoucherCategoryId,
+                    c.Name,
+                    c.Description
+                }).ToList();
+
+                return Ok(new { success = true, categories = result });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi lấy danh sách loại voucher");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi lấy danh sách loại voucher. Vui lòng thử lại sau." });
+            }
+        }
     }
+
+    // Request models
+    public class VoucherCreateRequest
+    {
+        [Required]
+        public string Code { get; set; }
+
+        public string VoucherType { get; set; } = "ShippingFee";
+
+        [Range(0, double.MaxValue)]
+        public decimal DiscountAmount { get; set; }
+
+        public decimal? MinimumOrderAmount { get; set; } = 0;
+        public decimal? MaximumDiscountAmount { get; set; }
+        public int? UsageLimit { get; set; }
+
+        [Required]
+        public DateTime ExpirationDate { get; set; }
+
+        public string ApplyMode { get; set; } = "Individual";
+        public int? VoucherCategoryId { get; set; }
+        public int? UserId { get; set; } = null; // Cho phép null mặc định
+        public int? RestaurantId { get; set; } = null;
+        public int? ProductId { get; set; } = null;
+        public List<VoucherConditionRequest>? Conditions { get; set; }
+    }
+    public class VoucherUpdateRequest
+    {
+        public string Code { get; set; }
+        public string VoucherType { get; set; }
+        public decimal? DiscountAmount { get; set; }
+        public decimal? MinimumOrderAmount { get; set; }
+        public decimal? MaximumDiscountAmount { get; set; }
+        public int? UsageLimit { get; set; }
+        public DateTime? ExpirationDate { get; set; }
+        public string Status { get; set; }
+        public string ApplyMode { get; set; }
+        public int? VoucherCategoryId { get; set; }
+        public int? RestaurantId { get; set; }
+        public int? ProductId { get; set; }
+        public int? UserId { get; set; }
+        public bool UpdateConditions { get; set; }
+        public List<VoucherConditionRequest> Conditions { get; set; }
+    }
+
+    public class VoucherConditionRequest
+    {
+        public string ConditionType { get; set; } // User, Order, Product
+        public string Field { get; set; }
+        public string Operator { get; set; }
+        public string Value { get; set; }
+    }
+
+  
     public class RejectRestaurantRequest
     {
         public string Reason { get; set; }
     }
 
 
-    public class VoucherDto
-    {
-        public string Code { get; set; }
-        public decimal DiscountAmount { get; set; }
-        public DateTime ExpirationDate { get; set; }
-        public string VoucherType { get; set; }
-        public int? UserId { get; set; } // Áp dụng cho User cụ thể
-        public int? ProductId { get; set; } // Áp dụng cho Món ăn
-        public int? RestaurantId { get; set; } // Áp dụng cho Nhà hàng
-        public int? VoucherCategoryId { get; set; } // Danh mục voucher
-    }
+  
 }

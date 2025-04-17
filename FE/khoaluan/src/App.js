@@ -21,6 +21,8 @@ import UserProfile from "./components/UserProfile";
 import AdminLogin from "./components/AdminLogin";
 import AdminDashboard from "./components/AdminDashboard";
 import RestaurantManagement from "./components/AdminRestaurants";
+import RevenueReportComponent from "./components/RestaurantRevenueReport";
+import VoucherManagement from "./components/AdminVoucher";
 
 function App() {
   return (
@@ -47,6 +49,8 @@ function App() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/dashboard" element={<AdminDashboard />} />
         <Route path="/admin/restaurants" element={<RestaurantManagement />} />
+        <Route path="/seller/renue" element={<RevenueReportComponent/>} />
+        <Route path="/admin/voucher" element={<VoucherManagement />} />
       </Routes>
     </Router>
   );

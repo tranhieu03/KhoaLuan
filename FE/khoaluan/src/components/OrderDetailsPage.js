@@ -1,7 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle, ShoppingCart, Truck, CreditCard, ChevronLeft } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  Clock, 
+  MapPin, 
+  CheckCircle, 
+  Truck, 
+  CreditCard, 
+  Package,
+  User,
+  Phone,
+  Navigation,
+  AlertCircle
+} from 'lucide-react';
 import axios from 'axios';
+import OrderTracking from './OrderTracking';
+import OrderStatusStepper from './OrderStatusStepper';
+import RestaurantCard from './RestaurantCard';
 import Header from './Header';
 
 const OrderDetailsPage = () => {
@@ -10,6 +25,7 @@ const OrderDetailsPage = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('details');
 
   useEffect(() => {
     fetchOrderDetails();
@@ -49,48 +65,259 @@ const OrderDetailsPage = () => {
     }).format(date);
   };
 
+  const getStatusColor = (status) => {
+    switch(status.toLowerCase()) {
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      case 'delivering': return 'bg-blue-100 text-blue-800';
+      case 'preparing': return 'bg-yellow-100 text-yellow-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   if (loading) {
-    return <div className="text-center text-lg font-semibold">Đang tải...</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-center text-red-500 font-semibold">{error}</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md p-6 bg-white rounded-lg shadow-md text-center">
+          <AlertCircle className="w-10 h-10 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">Lỗi khi tải đơn hàng</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button 
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+          >
+            Quay lại
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg border border-gray-200">
-       <Header />
-      <button onClick={() => navigate(-1)} className="flex items-center text-blue-500 hover:underline mb-4">
-        <ChevronLeft className="w-5 h-5 mr-1" /> Quay lại
-      </button>
-      <h1 className="text-2xl font-bold text-gray-800 mb-4">Chi tiết đơn hàng #{order.orderId}</h1>
-      <div className="space-y-2 text-gray-700">
-        <p><strong>Nhà hàng:</strong> {order.restaurantName}</p>
-        <p><strong>Trạng thái:</strong> <span className="font-semibold text-blue-600">{order.status}</span></p>
-        <p><strong>Ngày đặt hàng:</strong> {formatDate(order.orderDate)}</p>
-        <p><strong>Địa chỉ giao hàng:</strong> {order.deliveryAddress}</p>
-        <p><strong>Khoảng cách:</strong> {order.distanceKm} km</p>
-        <p><strong>Tổng tiền sản phẩm:</strong> {formatCurrency(order.productTotal)}</p>
-        <p><strong>Phí vận chuyển:</strong> {formatCurrency(order.shippingFee)}</p>
-        <p><strong>Giảm giá:</strong> {formatCurrency(order.discountAmount)}</p>
-        <p className="text-lg font-bold text-green-600"><strong>Tổng thanh toán:</strong> {formatCurrency(order.totalAmount)}</p>
-        <p><strong>Phương thức thanh toán:</strong> {order.paymentMethod}</p>
-        <p><strong>Trạng thái thanh toán:</strong> {order.paymentStatus}</p>
+    <div className="min-h-screen bg-gray-50 pb-12">
+      {/* Header */}
+      <div className="bg-white">
+        {/* Header tràn full width */}
+        <div className="w-full">
+          <Header />
+        </div>
+        <div className="bg-white shadow-sm">
+          <div className="max-w-4xl mx-auto px-4 py-4 flex items-center">
+            <button 
+              onClick={() => navigate(-1)}
+              className="p-2 rounded-full hover:bg-gray-100 mr-2"
+            >
+              <ChevronLeft className="w-6 h-6 text-gray-600" />
+            </button>
+            <h1 className="text-xl font-bold text-gray-800">Đơn hàng #{order.orderId}</h1>
+            <span className={`ml-auto px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+              {order.status}
+            </span>
+          </div>
+        </div>
       </div>
-      <h2 className="text-xl font-semibold mt-6 text-gray-800">Chi tiết món ăn</h2>
-      <div className="grid gap-4 mt-4">
-        {order.orderDetails.map((item) => (
-          <div key={item.productId} className="flex items-center p-4 border rounded-lg shadow-sm">
-            <img src={item.productImage} alt={item.productName} className="w-24 h-24 object-cover rounded-lg" />
-            <div className="ml-4">
-              <p className="font-semibold text-gray-900">{item.productName}</p>
-              <p>Số lượng: <strong>{item.quantity}</strong></p>
-              <p>Giá: {formatCurrency(item.price)}</p>
-              <p className="font-semibold">Thành tiền: {formatCurrency(item.totalPrice)}</p>
+
+      {/* Progress Stepper */}
+      <div className="max-w-4xl mx-auto px-4 mt-6">
+        <OrderStatusStepper 
+          currentStatus={order.status} 
+          orderDate={order.orderDate} 
+          estimatedDelivery={order.estimatedDeliveryTime}
+        />
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-4 mt-6">
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            className={`px-4 py-2 font-medium text-sm ${activeTab === 'details' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setActiveTab('details')}
+          >
+            Chi tiết
+          </button>
+          <button
+            className={`px-4 py-2 font-medium text-sm ${activeTab === 'tracking' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setActiveTab('tracking')}
+          >
+            Theo dõi
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'details' ? (
+          <div className="space-y-6">
+            {/* Restaurant Info */}
+            <RestaurantCard 
+              name={order.restaurantName} 
+              address={order.restaurantAddress}
+              image={order.restaurantImage}
+              rating={order.restaurantRating}
+            />
+
+            {/* Order Items */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-800 flex items-center">
+                  <Package className="w-5 h-5 mr-2 text-blue-500" />
+                  Chi tiết món ăn
+                </h2>
+              </div>
+              <div className="divide-y divide-gray-200">
+                {order.orderDetails.map((item, index) => (
+                  <div key={index} className="p-4 flex">
+                    <div className="flex-shrink-0 w-24 h-24">
+                      {item.productImage ? (
+                        <img 
+                          src={`https://localhost:44308/${item.productImage}`} 
+                          alt={item.productName}
+                          className="w-full h-full object-cover rounded-md"
+                          onError={(e) => {
+                            e.target.src = '/images/default-product.png'; // Fallback image if loading fails
+                            e.target.onerror = null;
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md">
+                          <Package className="w-8 h-8 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="ml-4 flex-1">
+                      <h3 className="font-medium text-gray-900">{item.productName}</h3>
+                      <p className="text-sm text-gray-500">Số lượng: {item.quantity}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-gray-700">{formatCurrency(item.price)}</span>
+                        <span className="font-medium">{formatCurrency(item.totalPrice)}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Delivery Info */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-800 flex items-center">
+                  <Truck className="w-5 h-5 mr-2 text-blue-500" />
+                  Thông tin giao hàng
+                </h2>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="flex items-start">
+                  <MapPin className="w-5 h-5 mr-3 text-red-500 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium">Địa chỉ nhận hàng</h3>
+                    <p className="text-gray-600">{order.deliveryAddress}</p>
+                    <p className="text-sm text-gray-500 mt-1">Khoảng cách: {order.distanceKm} km</p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <User className="w-5 h-5 mr-3 text-blue-500 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium">Người giao hàng</h3>
+                    <p className="text-gray-600">{order.deliveryPersonName || 'Chưa phân công'}</p>
+                    {order.deliveryPersonPhone && (
+                      <div className="flex items-center mt-1">
+                        <Phone className="w-4 h-4 mr-1 text-gray-500" />
+                        <span className="text-sm text-gray-500">{order.deliveryPersonPhone}</span>
+                      </div>
+                    )}
+                    <h3 className="font-medium mt-3">Người nhận</h3>
+                    <p className="text-gray-600">{order.customerName}</p>
+                    {order.customerPhone && (
+                      <div className="flex items-center mt-1">
+                        <Phone className="w-4 h-4 mr-1 text-gray-500" />
+                        <span className="text-sm text-gray-500">{order.customerPhone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex items-start">
+                  <Clock className="w-5 h-5 mr-3 text-yellow-500 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium">Thời gian giao hàng dự kiến</h3>
+                    <p className="text-gray-600">{formatDate(order.estimatedDeliveryTime)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Summary */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="font-semibold text-gray-800 flex items-center">
+                  <CreditCard className="w-5 h-5 mr-2 text-blue-500" />
+                  Thanh toán
+                </h2>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Tổng tiền món ăn</span>
+                  <span>{formatCurrency(order.productTotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Phí vận chuyển</span>
+                  <span>{formatCurrency(order.shippingFee)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Giảm giá</span>
+                  <span className="text-green-600">-{formatCurrency(order.discountAmount)}</span>
+                </div>
+                <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between">
+                  <span className="font-semibold">Tổng thanh toán</span>
+                  <span className="font-bold text-lg text-blue-600">{formatCurrency(order.totalAmount)}</span>
+                </div>
+                <div className="pt-3 mt-3 border-t border-gray-200">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Phương thức</span>
+                    <span>{order.paymentMethod}</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-gray-600">Trạng thái</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${order.paymentStatus === 'Paid' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {order.paymentStatus}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        ))}
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <OrderTracking 
+              orderId={order.orderId} 
+              deliveryAddress={order.deliveryAddress}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Footer Actions */}
+      {order.status === 'Delivering' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-3 px-4 shadow-lg">
+          <div className="max-w-4xl mx-auto flex justify-between items-center">
+            <div className="flex items-center">
+              <Truck className="w-5 h-5 mr-2 text-blue-500" />
+              <span className="font-medium">Tài xế đang trên đường</span>
+            </div>
+            <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition flex items-center">
+              <Navigation className="w-4 h-4 mr-2" />
+              Liên hệ tài xế
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

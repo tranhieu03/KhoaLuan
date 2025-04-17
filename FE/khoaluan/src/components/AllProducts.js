@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ArrowUpDown, Star } from "lucide-react";
+import { Search, ArrowUpDown, Star, MapPin } from "lucide-react";
 import axios from "axios";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -30,6 +30,12 @@ const ProductListingPage = () => {
   const [sortBy, setSortBy] = useState("name");
   const [sortAscending, setSortAscending] = useState(true);
   
+  // Location states
+  const [useLocation, setUseLocation] = useState(false);
+  const [userLocation, setUserLocation] = useState({ latitude: null, longitude: null });
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState(null);
+  
   // Food categories data
   const [foodCategories, setFoodCategories] = useState([]);
 
@@ -37,8 +43,6 @@ const ProductListingPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        // Gọi API để lấy danh sách danh mục
-        // (Bạn cần thay thế bằng API thực tế của bạn)
         const response = await axios.get("https://localhost:44308/api/Customer/food-categories");
         setFoodCategories(response.data);
       } catch (err) {
@@ -48,6 +52,49 @@ const ProductListingPage = () => {
 
     fetchCategories();
   }, []);
+
+  // Get user location
+  const getUserLocation = async () => {
+    if (!navigator.geolocation) {
+      setLocationError("Trình duyệt của bạn không hỗ trợ định vị");
+      return;
+    }
+
+    setLocationLoading(true);
+    setLocationError(null);
+
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0
+        });
+      });
+
+      const { latitude, longitude } = position.coords;
+      setUserLocation({ latitude, longitude });
+      console.log("User location obtained:", latitude, longitude);
+      return { latitude, longitude };
+      
+    } catch (err) {
+      console.error("Error getting location:", err);
+      setLocationError("Không thể lấy vị trí của bạn. Vui lòng cho phép truy cập vị trí.");
+      setUseLocation(false);
+      return null;
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  // Toggle location use
+  useEffect(() => {
+    if (useLocation) {
+      getUserLocation();
+    } else {
+      setUserLocation({ latitude: null, longitude: null });
+    }
+  }, [useLocation]);
 
   // Fetch products when filters or pagination change
   useEffect(() => {
@@ -67,10 +114,16 @@ const ProductListingPage = () => {
           sortAscending
         };
 
+        // Add location parameters if available
+        if (userLocation.latitude && userLocation.longitude) {
+          params.latitude = userLocation.latitude;
+          params.longitude = userLocation.longitude;
+        }
+
         // Gọi API để lấy danh sách sản phẩm
         const response = await axios.get("https://localhost:44308/api/Customer/all-products", {
           params,
-          withCredentials: true // Gửi cookie nếu cần xác thực
+          withCredentials: true
         });
 
         setProducts(response.data.items);
@@ -89,7 +142,7 @@ const ProductListingPage = () => {
     };
 
     fetchProducts();
-  }, [pagination.page, searchTerm, foodCategoryId, minPrice, maxPrice, sortBy, sortAscending]);
+  }, [pagination.page, searchTerm, foodCategoryId, minPrice, maxPrice, sortBy, sortAscending, userLocation]);
 
   // Handle page change
   const handlePageChange = (newPage) => {
@@ -101,16 +154,33 @@ const ProductListingPage = () => {
   // Handle search submit
   const handleSearch = (e) => {
     e.preventDefault();
-    setPagination({ ...pagination, page: 1 }); // Reset to first page when searching
+    setPagination({ ...pagination, page: 1 });
   };
 
   // Handle sort change
   const handleSortChange = (newSortBy) => {
     if (sortBy === newSortBy) {
-      setSortAscending(!sortAscending);
+      setSortAscending(sortAscending);
     } else {
       setSortBy(newSortBy);
       setSortAscending(true);
+    }
+  };
+
+  // Handle location toggle
+  const handleLocationToggle = async (e) => {
+    const useLocationValue = e.target.checked;
+    setUseLocation(useLocationValue);
+    
+    if (useLocationValue) {
+      // If toggling to use location and sorting by distance, just set the toggle
+      // The useEffect will handle getting the location
+      if (sortBy === 'distance') {
+        setPagination({ ...pagination, page: 1 });
+      }
+    } else if (sortBy === 'distance') {
+      // If turning off location but sorting by distance, change sort to name
+      setSortBy('name');
     }
   };
 
@@ -122,6 +192,12 @@ const ProductListingPage = () => {
   // Format price to VND
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+  };
+
+  // Format distance
+  const formatDistance = (distance) => {
+    if (distance === null || distance === undefined) return 'Không xác định';
+    return `${distance.toFixed(1)} km`;
   };
 
   return (
@@ -198,6 +274,28 @@ const ProductListingPage = () => {
           </div>
         </div>
         
+        {/* Location Filter */}
+        <div className="mt-4 mb-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="useLocation"
+              checked={useLocation}
+              onChange={handleLocationToggle}
+              className="w-4 h-4 text-blue-600"
+            />
+            <label htmlFor="useLocation" className="text-sm font-medium text-gray-700 flex items-center gap-1">
+              <MapPin className="h-4 w-4" /> Sử dụng vị trí hiện tại
+            </label>
+            
+            {locationLoading && <span className="text-xs text-gray-500 ml-2">Đang tải vị trí...</span>}
+            {locationError && <span className="text-xs text-red-500 ml-2">{locationError}</span>}
+            {userLocation.latitude && userLocation.longitude && (
+              <span className="text-xs text-green-500 ml-2">Vị trí đã được cập nhật</span>
+            )}
+          </div>
+        </div>
+        
         {/* Sort Options */}
         <div className="flex flex-wrap gap-2">
           <button
@@ -232,6 +330,25 @@ const ProductListingPage = () => {
           >
             Mới nhất {sortBy === 'newest' && <ArrowUpDown className="h-3 w-3" />}
           </button>
+          <button
+            className={`px-3 py-1 rounded-full text-sm flex items-center gap-1 ${
+              sortBy === 'distance' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'
+            }`}
+            onClick={() => {
+              if (!useLocation) {
+                // If location not enabled, prompt user
+                const wantLocation = window.confirm('Để sắp xếp theo khoảng cách, bạn cần cho phép truy cập vị trí. Bạn có muốn tiếp tục?');
+                if (wantLocation) {
+                  setUseLocation(true);
+                  handleSortChange('distance');
+                }
+              } else {
+                handleSortChange('distance');
+              }
+            }}
+          >
+            Khoảng cách {sortBy === 'distance' && <ArrowUpDown className="h-3 w-3" />}
+          </button>
         </div>
       </div>
 
@@ -250,6 +367,7 @@ const ProductListingPage = () => {
                 key={product.productId} 
                 product={product} 
                 onViewDetail={handleViewDetail}
+                showDistance={sortBy === 'distance' && useLocation}
               />
             ))}
           </div>

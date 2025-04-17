@@ -199,7 +199,7 @@ const SellerDashboard = () => {
   if (isCheckingRestaurant) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <RestaurantHeader />
+        
         <div className="flex justify-center items-center h-[calc(100vh-80px)]">
           <Loader2 className="animate-spin text-indigo-600" size={48} />
         </div>
@@ -208,8 +208,12 @@ const SellerDashboard = () => {
   }
 
   return (
+    <div className="bg-white">
+      {/* Header tràn full width */}
+      <div className="w-full">
+        <RestaurantHeader />
+      
     <div className="min-h-screen bg-gray-50">
-      <RestaurantHeader />
       
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -525,6 +529,8 @@ const SellerDashboard = () => {
           </div>
         )}
       </div>
+    </div>
+    </div>
     </div>
   );
 };

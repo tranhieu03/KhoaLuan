@@ -11,7 +11,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<EmailService>();
+builder.Services.AddScoped<EmailService>();
 // Đăng ký HttpClient với cấu hình riêng cho MapService
 builder.Services.AddHttpClient<MapService>(client =>
 {
@@ -22,7 +22,8 @@ builder.Services.AddHttpClient<MapService>(client =>
 
 // Đăng ký MapService
 builder.Services.AddScoped<MapService>();
-builder.Services.AddSingleton<VNPayService>();
+builder.Services.AddScoped<VoucherService>();
+builder.Services.AddScoped<VNPayService>();
 builder.Services.AddScoped<IVNPayService, VNPayService>();
 builder.Services.AddHostedService<OrderAutoCompletionService>();
 

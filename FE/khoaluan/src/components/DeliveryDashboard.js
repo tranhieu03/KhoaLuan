@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import * as signalR from '@microsoft/signalr';
 import DeliveryHeader from './DeliveryHeader';
+import { MapPin, CheckCircle, AlertCircle } from 'lucide-react';
 
 const DeliveryPersonDashboard = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
@@ -11,6 +12,10 @@ const DeliveryPersonDashboard = () => {
   const [activeTab, setActiveTab] = useState('available');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [hubConnection, setHubConnection] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [locationError, setLocationError] = useState('');
+  const [locationTracking, setLocationTracking] = useState(false);
+  const [trackingInterval, setTrackingInterval] = useState(null);
 
   // Initialize SignalR connection
   useEffect(() => {
@@ -54,8 +59,114 @@ const DeliveryPersonDashboard = () => {
       if (hubConnection) {
         hubConnection.stop();
       }
+      
+      // Clear location tracking interval when component unmounts
+      if (trackingInterval) {
+        clearInterval(trackingInterval);
+      }
     };
   }, []);
+
+  // Get and setup location tracking
+  useEffect(() => {
+    // Request location permission immediately on component mount
+    getCurrentLocation();
+  }, []);
+
+  // Function to get current location
+  const getCurrentLocation = () => {
+    setLocationError('');
+    
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+      },
+      (error) => {
+        let errorMessage = 'Unknown error occurred';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'User denied the request for Geolocation';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information is unavailable';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'The request to get user location timed out';
+            break;
+        }
+        setLocationError(errorMessage);
+        toast.error(`Location error: ${errorMessage}`);
+      },
+      { enableHighAccuracy: true }
+    );
+  };
+
+  // Start location tracking for a specific order
+  const startLocationTracking = (orderId) => {
+    // Clear any existing interval
+    if (trackingInterval) {
+      clearInterval(trackingInterval);
+    }
+    
+    setLocationTracking(true);
+    
+    // Set up interval to update location every 30 seconds
+    const intervalId = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          };
+          
+          setCurrentLocation(location);
+          
+          // Send location update to the server
+          updateDeliveryLocation(orderId, location);
+        },
+        (error) => {
+          console.error('Error getting location for tracking:', error);
+        },
+        { enableHighAccuracy: true }
+      );
+    }, 30000); // 30 seconds interval
+    
+    setTrackingInterval(intervalId);
+    
+    // Also get and send location immediately
+    getCurrentLocation();
+  };
+
+  // Stop location tracking
+  const stopLocationTracking = () => {
+    if (trackingInterval) {
+      clearInterval(trackingInterval);
+      setTrackingInterval(null);
+    }
+    setLocationTracking(false);
+  };
+
+  // Update delivery location
+  const updateDeliveryLocation = async (orderId, location) => {
+    try {
+      await axios.post('https://localhost:44308/api/Order/update-delivery-location', {
+        orderId: orderId,
+        latitude: location.latitude,
+        longitude: location.longitude
+      });
+      console.log('Location updated successfully');
+    } catch (error) {
+      console.error('Failed to update location:', error);
+    }
+  };
 
   // Fetch available orders
   const fetchAvailableOrders = async () => {
@@ -95,14 +206,33 @@ const DeliveryPersonDashboard = () => {
     fetchMyOrders();
   }, []);
 
-  // Accept delivery
+  // Accept delivery with location
   const handleAcceptDelivery = async (orderId) => {
+    if (!currentLocation) {
+      getCurrentLocation();
+      toast.warning('Getting your current location...');
+      setTimeout(() => handleAcceptDelivery(orderId), 1000);
+      return;
+    }
+    
+    if (locationError) {
+      toast.error('Cannot accept order without location access. Please enable location services.');
+      return;
+    }
+    
     try {
-      const response = await axios.post(`https://localhost:44308/api/Order/accept-delivery/${orderId}`);
+      const response = await axios.post(`https://localhost:44308/api/Order/accept-delivery/${orderId}`, {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude
+      });
+      
       if (response.data.message) {
         toast.success(response.data.message);
         fetchAvailableOrders();
         fetchMyOrders();
+        
+        // Start location tracking for this order
+        startLocationTracking(orderId);
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to accept order');
@@ -110,13 +240,32 @@ const DeliveryPersonDashboard = () => {
     }
   };
 
-  // Confirm delivery
+  // Confirm delivery with location
   const handleConfirmDelivery = async (orderId) => {
+    if (!currentLocation) {
+      getCurrentLocation();
+      toast.warning('Getting your current location...');
+      setTimeout(() => handleConfirmDelivery(orderId), 1000);
+      return;
+    }
+    
+    if (locationError) {
+      toast.error('Cannot confirm delivery without location access. Please enable location services.');
+      return;
+    }
+    
     try {
-      const response = await axios.post(`https://localhost:44308/api/Order/confirm-delivery/${orderId}`);
+      const response = await axios.post(`https://localhost:44308/api/Order/confirm-delivery/${orderId}`, {
+        latitude: currentLocation.latitude,
+        longitude: currentLocation.longitude
+      });
+      
       if (response.data.message) {
         toast.success(response.data.message);
         fetchMyOrders();
+        
+        // Stop location tracking when delivery is confirmed
+        stopLocationTracking();
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to confirm delivery');
@@ -146,6 +295,55 @@ const DeliveryPersonDashboard = () => {
       return ['All', 'ReadyForDelivery'];
     }
     return ['All', 'InDelivery', 'Delivered', 'Completed'];
+  };
+
+  // Render location status indicator
+  const renderLocationStatus = () => {
+    if (locationError) {
+      return (
+        <div className="flex items-center bg-red-100 text-red-800 px-3 py-2 rounded mb-4">
+          <AlertCircle className="w-5 h-5 mr-2" />
+          <div>
+            <p className="font-medium">Location Error</p>
+            <p className="text-sm">{locationError}</p>
+            <button 
+              onClick={getCurrentLocation}
+              className="text-sm underline mt-1"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
+    if (currentLocation) {
+      return (
+        <div className="flex items-center bg-green-100 text-green-800 px-3 py-2 rounded mb-4">
+          <MapPin className="w-5 h-5 mr-2" />
+          <div>
+            <p className="font-medium">Location Available</p>
+            <p className="text-sm">
+              Lat: {currentLocation.latitude.toFixed(6)}, 
+              Lng: {currentLocation.longitude.toFixed(6)}
+            </p>
+            {locationTracking && (
+              <p className="text-sm font-medium">Tracking active</p>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center bg-yellow-100 text-yellow-800 px-3 py-2 rounded mb-4">
+        <MapPin className="w-5 h-5 mr-2" />
+        <div>
+          <p className="font-medium">Getting your location...</p>
+          <p className="text-sm">Please make sure location services are enabled</p>
+        </div>
+      </div>
+    );
   };
 
   // Render order card
@@ -197,7 +395,8 @@ const DeliveryPersonDashboard = () => {
           {!isMyOrder && (
             <button
               onClick={() => handleAcceptDelivery(order.orderId)}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+              disabled={!!locationError}
+              className={`px-4 py-2 rounded text-white ${locationError ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'}`}
             >
               Accept Order
             </button>
@@ -206,20 +405,52 @@ const DeliveryPersonDashboard = () => {
           {isMyOrder && order.status === 'InDelivery' && (
             <button
               onClick={() => handleConfirmDelivery(order.orderId)}
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+              disabled={!!locationError}
+              className={`px-4 py-2 rounded text-white ${locationError ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'}`}
             >
               Confirm Delivery
             </button>
           )}
         </div>
+        
+        {isMyOrder && order.status === 'InDelivery' && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <p className="text-sm font-medium mb-2">Location Tracking</p>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => startLocationTracking(order.orderId)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
+                disabled={locationTracking}
+              >
+                Start Tracking
+              </button>
+              <button
+                onClick={stopLocationTracking}
+                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                disabled={!locationTracking}
+              >
+                Stop Tracking
+              </button>
+              <button
+                onClick={getCurrentLocation}
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1 rounded text-sm"
+              >
+                Update Location
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
 
   return (
     <div className="container mx-auto p-4">
-      <DeliveryHeader/>
+      <DeliveryHeader />
       <h1 className="text-2xl font-bold mb-6">Delivery Dashboard</h1>
+      
+      {/* Location Status */}
+      {renderLocationStatus()}
       
       {/* Tabs */}
       <div className="flex border-b mb-6">
