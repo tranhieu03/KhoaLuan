@@ -1,4 +1,5 @@
 ﻿using KhoaLuan1.Hubs;
+using KhoaLuan1.Middleware;
 using KhoaLuan1.Models;
 using KhoaLuan1.Service;
 using KhoaLuan1.Services;
@@ -22,6 +23,7 @@ builder.Services.AddHttpClient<MapService>(client =>
 
 // Đăng ký MapService
 builder.Services.AddScoped<MapService>();
+builder.Services.AddScoped<OrderBackgroundService>();
 builder.Services.AddScoped<VoucherService>();
 builder.Services.AddScoped<VNPayService>();
 builder.Services.AddScoped<IVNPayService, VNPayService>();
@@ -75,7 +77,7 @@ app.UseCors("AllowReactApp");
 
 // Add Session Middleware
 app.UseSession();
-
+app.UseMiddleware<SignalRAuthMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

@@ -124,6 +124,18 @@ public partial class KhoaluantestContext : DbContext
         {
             entity.HasKey(e => e.MessageId).HasName("PK__Messages__C87C0C9CCB06022F");
 
+            entity.ToTable(tb => tb.HasTrigger("trg_Messages_AfterInsert"));
+
+            entity.HasIndex(e => e.IsRead, "IX_Messages_IsRead");
+
+            entity.HasIndex(e => e.OrderId, "IX_Messages_OrderId");
+
+            entity.HasIndex(e => e.ReceiverId, "IX_Messages_ReceiverId").HasFilter("([ReceiverId] IS NOT NULL)");
+
+            entity.HasIndex(e => e.SenderId, "IX_Messages_SenderId");
+
+            entity.HasIndex(e => e.SentAt, "IX_Messages_SentAt");
+
             entity.Property(e => e.SentAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
@@ -135,7 +147,6 @@ public partial class KhoaluantestContext : DbContext
 
             entity.HasOne(d => d.Receiver).WithMany(p => p.MessageReceivers)
                 .HasForeignKey(d => d.ReceiverId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Messages__Receiv__4C6B5938");
 
             entity.HasOne(d => d.Sender).WithMany(p => p.MessageSenders)

@@ -755,13 +755,16 @@ namespace KhoaLuan1.Controllers
         {
             var userId = HttpContext.Session.GetInt32("UserId");
             var role = HttpContext.Session.GetString("Role");
-
             if (userId == null || role != "DeliveryPerson")
             {
                 return Unauthorized(new { message = "Bạn không có quyền nhận đơn hàng này." });
             }
+            var order = await _context.Orders
+                .Include(o => o.User)
+                .Include(o => o.Restaurant)
+                .ThenInclude(r => r.Seller)
+                .FirstOrDefaultAsync(o => o.OrderId == orderId);
 
-            var order = await _context.Orders.FindAsync(orderId);
             if (order == null || order.Status != "ReadyForDelivery")
             {
                 return BadRequest(new { message = "Đơn hàng không có sẵn để giao." });
@@ -794,11 +797,10 @@ namespace KhoaLuan1.Controllers
                 TrackingTime = DateTime.UtcNow,
                 TrackingType = "Start" // Đánh dấu đây là vị trí bắt đầu
             };
-
             _context.DeliveryTrackings.Add(tracking);
             await _context.SaveChangesAsync();
 
-            // 📌 Thêm thông báo vào DB
+            // Thêm thông báo vào DB
             var notification = new Notification
             {
                 UserId = order.UserId, // Gửi thông báo cho khách hàng
@@ -806,16 +808,39 @@ namespace KhoaLuan1.Controllers
                 CreatedAt = DateTime.UtcNow,
                 IsRead = false
             };
-
             _context.Notifications.Add(notification);
+
+            // Tạo tin nhắn chào mừng trong nhóm chat
+            var user = await _context.Users.FindAsync(userId);
+            var welcomeMessage = new Message
+            {
+                SenderId = userId.Value,
+                OrderId = orderId,
+                Content = $"Xin chào! Tôi là {user.FullName}, người giao hàng của đơn hàng #{orderId}. Tôi sẽ giao hàng đến cho bạn trong thời gian sớm nhất.",
+                SentAt = DateTime.UtcNow,
+                IsRead = false
+            };
+            _context.Messages.Add(welcomeMessage);
             await _context.SaveChangesAsync();
 
-            // Gửi thông báo tới khách hàng và nhà hàng qua SignalR
+            // Gửi thông báo qua SignalR
             await _hubContext.Clients.User(order.UserId.ToString())
                 .SendAsync("ReceiveNotification", notification.Message);
-
             await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
                 .SendAsync("ReceiveNotification", $"Shipper đã nhận đơn hàng #{order.OrderId}.");
+
+            // Gửi tin nhắn chào mừng tới nhóm chat
+            var groupName = $"Order_{orderId}";
+            await _hubContext.Clients.Group(groupName).SendAsync("ReceiveMessage",
+                new
+                {
+                    messageId = welcomeMessage.MessageId,
+                    senderId = welcomeMessage.SenderId,
+                    senderName = user.FullName,
+                    content = welcomeMessage.Content,
+                    sentAt = welcomeMessage.SentAt,
+                    isRead = welcomeMessage.IsRead
+                });
 
             // Gửi vị trí ban đầu của tài xế cho khách hàng
             await _hubContext.Clients.User(order.UserId.ToString())
@@ -1387,6 +1412,56 @@ namespace KhoaLuan1.Controllers
                 .SendAsync("ReceiveNotification", notificationToDeliveryPerson.Message);
 
             return Ok(new { message = "Đã báo cáo chưa nhận được hàng. Chúng tôi sẽ liên hệ để hỗ trợ bạn." });
+        }
+        [HttpPost("cancel-order/{orderId}")]
+        public async Task<IActionResult> CancelOrder(int orderId)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+
+            if (userId == null)
+                return Unauthorized(new { message = "You must be logged in to cancel an order." });
+
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+                return NotFound(new { message = "Order not found." });
+
+            // Check if this is user's own order
+            if (order.UserId != userId)
+                return Unauthorized(new { message = "You can only cancel your own orders." });
+
+            // Check if order is in a status that can be cancelled
+            if (order.Status != "Pending" && order.Status != "ReadyForDelivery")
+                return BadRequest(new { message = "This order cannot be cancelled in its current status." });
+
+            // Update order status
+            order.Status = "Cancelled";
+
+            // Create notification for restaurant
+            var restaurantOwnerId = await _context.Restaurants
+                .Where(r => r.RestaurantId == order.RestaurantId)
+                .Select(r => r.SellerId)
+                .FirstOrDefaultAsync();
+
+            if (restaurantOwnerId > 0)
+            {
+                var restaurantNotification = new Notification
+                {
+                    UserId = restaurantOwnerId,
+                    Message = $"Đơn hàng #{order.OrderId} đã bị hủy bởi khách hàng.",
+                    CreatedAt = DateTime.UtcNow,
+                    IsRead = false
+                };
+
+                _context.Notifications.Add(restaurantNotification);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Send notification via SignalR to restaurant
+            await _hubContext.Clients.Group($"Restaurant_{order.RestaurantId}")
+                .SendAsync("ReceiveNotification", $"Đơn hàng #{order.OrderId} đã bị hủy bởi khách hàng.");
+
+            return Ok(new { message = "Đơn hàng đã được hủy thành công." });
         }
 
     }

@@ -6,7 +6,6 @@ import Header from "./Header";
 const API_ORDERS = "https://localhost:44308/api/Customer";
 const API_ORDERS2 = "https://localhost:44308/api/Order";
 
-
 function MyOrders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -16,6 +15,8 @@ function MyOrders() {
   const [notification, setNotification] = useState(null);
   const [reportReason, setReportReason] = useState("");
   const [reportingOrderId, setReportingOrderId] = useState(null);
+  const [cancelOrderId, setCancelOrderId] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
 
   useEffect(() => {
     fetchOrders();
@@ -33,7 +34,6 @@ function MyOrders() {
       });
       
       if (response.status === 200) {
-        // Sắp xếp đơn hàng theo ID giảm dần (mới nhất lên đầu)
         const sortedOrders = (response.data.orders || []).sort((a, b) => b.orderId - a.orderId);
         setOrders(sortedOrders);
       } else if (response.status === 404) {
@@ -47,9 +47,6 @@ function MyOrders() {
     }
   };
 
- 
-
-  // MyOrders.js
   const confirmReceipt = async (orderId) => {
     try {
       setIsLoading(true);
@@ -65,12 +62,10 @@ function MyOrders() {
           message: response.data.message || "Xác nhận nhận hàng thành công."
         });
         
-        // Chuyển hướng đến trang đánh giá sau 2 giây
         setTimeout(() => {
-          navigate(`/review-order/${orderId}`); // Sử dụng navigate đã được khai báo
+          navigate(`/review-order/${orderId}`);
         }, 2000);
         
-        // Update order status locally
         setOrders(orders.map(order => 
           order.orderId === orderId 
             ? { ...order, status: "Completed", paymentStatus: order.paymentMethod === "COD" ? "Paid" : order.paymentStatus } 
@@ -82,6 +77,58 @@ function MyOrders() {
       setNotification({
         type: "error",
         message: error.response?.data?.message || "Không thể xác nhận nhận hàng. Vui lòng thử lại sau."
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openCancelModal = (orderId) => {
+    setCancelOrderId(orderId);
+    setCancelReason("");
+  };
+
+  const closeCancelModal = () => {
+    setCancelOrderId(null);
+    setCancelReason("");
+  };
+
+  const submitCancelOrder = async () => {
+    if (!cancelReason.trim()) {
+      setNotification({
+        type: "error",
+        message: "Vui lòng nhập lý do hủy đơn hàng."
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await axios.post(
+        `${API_ORDERS2}/cancel-order/${cancelOrderId}`,
+        { reason: cancelReason },
+        { withCredentials: true }
+      );
+      
+      if (response.status === 200) {
+        setNotification({
+          type: "success",
+          message: response.data.message || "Đơn hàng đã được hủy thành công."
+        });
+        
+        setOrders(orders.map(order => 
+          order.orderId === cancelOrderId 
+            ? { ...order, status: "Cancelled" } 
+            : order
+        ));
+        
+        closeCancelModal();
+      }
+    } catch (error) {
+      console.error("Lỗi khi hủy đơn hàng:", error);
+      setNotification({
+        type: "error",
+        message: error.response?.data?.message || "Không thể hủy đơn hàng. Vui lòng thử lại sau."
       });
     } finally {
       setIsLoading(false);
@@ -121,7 +168,6 @@ function MyOrders() {
           message: response.data.message || "Đã báo cáo chưa nhận được hàng thành công."
         });
         
-        // Update order status locally
         setOrders(orders.map(order => 
           order.orderId === reportingOrderId 
             ? { ...order, status: "DeliveryDisputed" } 
@@ -190,6 +236,7 @@ function MyOrders() {
       case 'Cancelled': return 'Đã hủy';
       case 'Delivered': return 'Đã giao';
       case 'DeliveryDisputed': return 'Đang xác minh';
+      case 'ReadyForDelivery': return 'Sẵn sàng giao';
       default: return status;
     }
   };
@@ -252,7 +299,6 @@ function MyOrders() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
         <h1 className="text-2xl font-bold text-gray-800 mb-4 md:mb-0">Danh Sách Đơn Hàng Của Bạn</h1>
         
-        {/* Bộ lọc trạng thái đơn hàng */}
         <div className="relative">
           <select
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -261,6 +307,7 @@ function MyOrders() {
           >
             <option value="All">Tất cả đơn hàng</option>
             <option value="Pending">Đang xử lý</option>
+            <option value="ReadyForDelivery">Sẵn sàng giao</option>
             <option value="Delivered">Đã giao</option>
             <option value="Completed">Hoàn thành</option>
             <option value="Cancelled">Đã hủy</option>
@@ -274,8 +321,6 @@ function MyOrders() {
         </div>
       </div>
 
-      {/* Danh sách đơn hàng */}
-      {/* Danh sách đơn hàng */}
       {filteredOrders.length > 0 ? (
         <div className="space-y-6">
           {filteredOrders.map((order) => (
@@ -303,7 +348,6 @@ function MyOrders() {
                   </div>
                 </div>
 
-                {/* Nút xem chi tiết */}
                 <div className="mt-4 flex justify-end">
                   <button
                     onClick={() => viewOrderDetails(order.orderId)}
@@ -388,12 +432,24 @@ function MyOrders() {
                       </svg>
                       Báo chưa nhận được hàng
                     </button>
-                    
                   </div>
                 )}
                 
-                    
-            
+                {/* Cancel button for Pending and ReadyForDelivery orders */}
+                {(order.status === "Pending" || order.status === "ReadyForDelivery") && (
+                  <div className="mt-6">
+                    <button
+                      onClick={() => openCancelModal(order.orderId)}
+                      className="inline-flex justify-center items-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      disabled={isLoading}
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                      Hủy đơn hàng
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -477,6 +533,71 @@ function MyOrders() {
                 <button
                   type="button"
                   onClick={closeReportModal}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  disabled={isLoading}
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Order Modal */}
+      {cancelOrderId && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                  </div>
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">
+                      Hủy đơn hàng
+                    </h3>
+                    <div className="mt-2">
+                      <label htmlFor="cancelReason" className="block text-sm font-medium text-gray-700 mb-1">
+                        Lý do hủy đơn hàng
+                      </label>
+                      <textarea
+                        id="cancelReason"
+                        name="cancelReason"
+                        rows="4"
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        className="shadow-sm focus:ring-blue-500 focus:border-blue-500 mt-1 block w-full sm:text-sm border border-gray-300 rounded-md p-2"
+                        placeholder="Vui lòng nhập lý do hủy đơn hàng..."
+                      ></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  onClick={submitCancelOrder}
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <div className="w-5 h-5 border-t-2 border-b-2 border-white rounded-full animate-spin mr-2"></div>
+                  ) : null}
+                  Xác nhận hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={closeCancelModal}
                   className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                   disabled={isLoading}
                 >

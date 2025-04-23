@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import OrderChat from './OrderChat';
 import { 
   ChevronLeft, 
   Clock, 
@@ -11,7 +12,8 @@ import {
   User,
   Phone,
   Navigation,
-  AlertCircle
+  AlertCircle,
+  MessageCircle // Added MessageCircle icon for chat tab
 } from 'lucide-react';
 import axios from 'axios';
 import OrderTracking from './OrderTracking';
@@ -69,10 +71,17 @@ const OrderDetailsPage = () => {
     switch(status.toLowerCase()) {
       case 'completed': return 'bg-green-100 text-green-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
-      case 'delivering': return 'bg-blue-100 text-blue-800';
+      case 'delivering': 
+      case 'indelivery': return 'bg-blue-100 text-blue-800';
       case 'preparing': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  // Check if chat is available (only for orders in delivery)
+  const isChatAvailable = () => {
+    if (!order) return false;
+    return order.status.toLowerCase() === 'indelivery' || order.status.toLowerCase() === 'delivering';
   };
 
   if (loading) {
@@ -150,6 +159,15 @@ const OrderDetailsPage = () => {
           >
             Theo dõi
           </button>
+          {isChatAvailable() && (
+            <button
+              className={`px-4 py-2 font-medium text-sm flex items-center ${activeTab === 'chat' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              <MessageCircle className="w-4 h-4 mr-1" />
+              Chat
+            </button>
+          )}
         </div>
 
         {/* Tab Content */}
@@ -293,28 +311,52 @@ const OrderDetailsPage = () => {
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'tracking' ? (
           <div className="bg-white rounded-lg shadow-sm p-4">
             <OrderTracking 
               orderId={order.orderId} 
               deliveryAddress={order.deliveryAddress}
             />
           </div>
+        ) : activeTab === 'chat' && (
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <div className="mb-4">
+              <h2 className="font-semibold text-gray-800 flex items-center mb-2">
+                <MessageCircle className="w-5 h-5 mr-2 text-blue-500" />
+                Liên hệ với người giao hàng
+              </h2>
+              <p className="text-sm text-gray-600">
+                Bạn có thể liên hệ với người giao hàng để cập nhật thông tin về đơn hàng của bạn.
+              </p>
+            </div>
+            <OrderChat orderId={order.orderId} />
+          </div>
         )}
       </div>
 
       {/* Footer Actions */}
-      {order.status === 'Delivering' && (
+      {(order.status === 'InDelivery' || order.status === 'Delivering') && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-3 px-4 shadow-lg">
           <div className="max-w-4xl mx-auto flex justify-between items-center">
             <div className="flex items-center">
               <Truck className="w-5 h-5 mr-2 text-blue-500" />
               <span className="font-medium">Tài xế đang trên đường</span>
             </div>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition flex items-center">
-              <Navigation className="w-4 h-4 mr-2" />
-              Liên hệ tài xế
-            </button>
+            <div className="flex gap-2">
+              {isChatAvailable() && activeTab !== 'chat' && (
+                <button 
+                  onClick={() => setActiveTab('chat')}
+                  className="px-4 py-2 bg-white border border-blue-500 text-blue-600 rounded-md hover:bg-blue-50 transition flex items-center"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Chat
+                </button>
+              )}
+              <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition flex items-center">
+                <Navigation className="w-4 h-4 mr-2" />
+                Liên hệ tài xế
+              </button>
+            </div>
           </div>
         </div>
       )}

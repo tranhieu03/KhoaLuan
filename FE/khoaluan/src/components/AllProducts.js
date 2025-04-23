@@ -5,6 +5,7 @@ import axios from "axios";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
+import Footer from "./Footer";
 
 const ProductListingPage = () => {
   const navigate = useNavigate();
@@ -413,11 +414,14 @@ const ProductListingPage = () => {
                   Sau
                 </button>
               </nav>
+              
             </div>
+            
           )}
         </>
       )}
     </div>
+    
   );
 };
 

@@ -9,7 +9,7 @@ public partial class Message
 
     public int SenderId { get; set; }
 
-    public int ReceiverId { get; set; }
+    public int? ReceiverId { get; set; }
 
     public int OrderId { get; set; }
 
@@ -17,9 +17,11 @@ public partial class Message
 
     public DateTime SentAt { get; set; }
 
+    public bool IsRead { get; set; }
+
     public virtual Order Order { get; set; } = null!;
 
-    public virtual User Receiver { get; set; } = null!;
+    public virtual User? Receiver { get; set; }
 
     public virtual User Sender { get; set; } = null!;
 }

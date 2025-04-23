@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import * as signalR from '@microsoft/signalr';
 import DeliveryHeader from './DeliveryHeader';
 import { MapPin, CheckCircle, AlertCircle } from 'lucide-react';
+import DeliveryChat from './DeliveryChat';
 
 const DeliveryPersonDashboard = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
@@ -403,6 +404,7 @@ const DeliveryPersonDashboard = () => {
           )}
           
           {isMyOrder && order.status === 'InDelivery' && (
+            
             <button
               onClick={() => handleConfirmDelivery(order.orderId)}
               disabled={!!locationError}
@@ -410,7 +412,9 @@ const DeliveryPersonDashboard = () => {
             >
               Confirm Delivery
             </button>
+            
           )}
+          
         </div>
         
         {isMyOrder && order.status === 'InDelivery' && (
@@ -440,7 +444,9 @@ const DeliveryPersonDashboard = () => {
             </div>
           </div>
         )}
+        <DeliveryChat myOrders={myOrders} />
       </div>
+      
     );
   };
 
@@ -461,7 +467,7 @@ const DeliveryPersonDashboard = () => {
             setOrderStatusFilter('All');
           }}
         >
-          Available Orders
+          Đơn hàng chờ giao
         </button>
         <button
           className={`py-2 px-4 ${activeTab === 'my-orders' ? 'border-b-2 border-blue-500 font-medium text-blue-500' : 'text-gray-500'}`}
@@ -470,7 +476,7 @@ const DeliveryPersonDashboard = () => {
             setOrderStatusFilter('All');
           }}
         >
-          My Orders
+          Đơn hàng của tôi
         </button>
       </div>
       
