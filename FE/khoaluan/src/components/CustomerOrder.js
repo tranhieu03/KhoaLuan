@@ -232,6 +232,7 @@ function MyOrders() {
   const getStatusText = (status) => {
     switch (status) {
       case 'Pending': return 'Đang xử lý';
+      case 'InDelivery': return 'Đang Giao';
       case 'Completed': return 'Hoàn thành';
       case 'Cancelled': return 'Đã hủy';
       case 'Delivered': return 'Đã giao';
@@ -308,6 +309,7 @@ function MyOrders() {
             <option value="All">Tất cả đơn hàng</option>
             <option value="Pending">Đang xử lý</option>
             <option value="ReadyForDelivery">Sẵn sàng giao</option>
+            <option value="InDelivery">Đang giao</option>
             <option value="Delivered">Đã giao</option>
             <option value="Completed">Hoàn thành</option>
             <option value="Cancelled">Đã hủy</option>

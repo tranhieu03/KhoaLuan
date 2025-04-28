@@ -1,13 +1,20 @@
 ﻿using KhoaLuan1.Hubs;
 using KhoaLuan1.Models;
 using KhoaLuan1.Service;
+using KhoaLuan1.Services;
 using MailKit;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Net;
+using System.Text;
 using System.Text.Json;
+using static VNPayService;
 
 namespace KhoaLuan1.Controllers
 {
@@ -16,6 +23,7 @@ namespace KhoaLuan1.Controllers
     public class OrderController : ControllerBase
     {
         private readonly IConfiguration _configuration;
+        private readonly ZaloPayService _zaloPayService;
         private readonly ILogger<OrderController> _logger;
         private readonly KhoaluantestContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
@@ -25,7 +33,12 @@ namespace KhoaLuan1.Controllers
 
 
         public OrderController(KhoaluantestContext context, IHubContext<NotificationHub> hubContext,
-           VNPayService vnPayService, MapService mapService, IConfiguration configuration, ILogger<OrderController> logger, VoucherService voucherService)
+           VNPayService vnPayService, MapService mapService,
+           IConfiguration configuration,
+           ILogger<OrderController> logger,
+           VoucherService voucherService,
+           ZaloPayService zaloPayService)
+
         {
             _context = context;
             _hubContext = hubContext;
@@ -34,6 +47,7 @@ namespace KhoaLuan1.Controllers
             _configuration = configuration;
             _logger = logger;
             _voucherService = voucherService;
+            _zaloPayService = zaloPayService;
         }
 
 
@@ -120,14 +134,7 @@ namespace KhoaLuan1.Controllers
             }
         }
 
-        // DTO for validate-voucher request
-       
-
-
-        // Hàm đánh giá điều kiện voucher
-
-
-        //tạo đơn hàng
+        
         [HttpPost("create-order")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
@@ -402,32 +409,53 @@ namespace KhoaLuan1.Controllers
                 _context.CartItems.RemoveRange(cartItems);
                 await _context.SaveChangesAsync();
                 _logger.LogInformation("Đã xóa các sản phẩm đã chọn khỏi giỏ hàng");
+                var orderWithDetails = await _context.Orders
+           .Include(o => o.OrderDetails)
+           .ThenInclude(od => od.Product)
+           .FirstOrDefaultAsync(o => o.OrderId == order.OrderId);
 
+              
                 // 13. Xử lý thanh toán VNPay nếu được chọn
+                // Phần xử lý thanh toán VNPay trong API create-order
                 if (request.PaymentMethod == "VNPay")
                 {
                     _logger.LogInformation("Bắt đầu xử lý thanh toán VNPay cho đơn hàng {OrderId}", order.OrderId);
 
                     try
                     {
-                        // Tạo PaymentRequest từ Order
+                        // Đặt trạng thái thanh toán là Pending ngay khi tạo đơn
+                        order.PaymentStatus = "Pending";
+                        order.Status = "Pending";
+                        await _context.SaveChangesAsync();
+
+                        var returnUrl = _configuration["Vnpay:ReturnUrl"];
+                        if (string.IsNullOrEmpty(returnUrl))
+                        {
+                            _logger.LogError("Thiếu cấu hình ReturnUrl cho VNPay");
+                            return StatusCode(500, new
+                            {
+                                success = false,
+                                message = "Có lỗi xảy ra khi xử lý thanh toán VNPay. Vui lòng thử lại sau."
+                            });
+                        }
+
                         var paymentRequest = new PaymentRequest
                         {
                             OrderId = order.OrderId.ToString(),
-                            Amount = order.TotalAmount,
-                            OrderDescription = $"Thanh toan don hang {order.OrderId}",
-                            CustomerName = user.FullName ?? "Khach hang",
-                            ReturnUrl = _configuration["VNPay:ReturnUrl"]
+                            Amount = (long)(order.TotalAmount * 100), // VNPay yêu cầu amount theo VND
+                            OrderDescription = $"Thanh toan don hang #{order.OrderId}",
+                            CustomerName = RemoveDiacritics(user.FullName ?? "Khach hang").ToUpper(),
+                            ReturnUrl = returnUrl
                         };
 
                         var paymentUrl = _vnPayService.CreatePaymentUrl(paymentRequest, HttpContext);
-                        _logger.LogInformation("Đã tạo URL thanh toán VNPay thành công cho đơn hàng {OrderId}", order.OrderId);
 
                         // Lưu thông tin đơn hàng tạm thời vào session
                         HttpContext.Session.SetString($"Order_{order.OrderId}", System.Text.Json.JsonSerializer.Serialize(new
                         {
                             OrderId = order.OrderId,
-                            CreatedDate = DateTime.UtcNow
+                            CreatedDate = DateTime.UtcNow,
+                            PaymentMethod = "VNPay"
                         }));
 
                         return Ok(new
@@ -441,7 +469,11 @@ namespace KhoaLuan1.Controllers
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Lỗi khi xử lý thanh toán VNPay cho đơn hàng {OrderId}", order.OrderId);
+                        // Rollback trạng thái nếu có lỗi
+                        order.PaymentStatus = "Failed";
+                        await _context.SaveChangesAsync();
+
+                        _logger.LogError(ex, "Lỗi khi xử lý thanh toán VNPay");
                         return StatusCode(500, new
                         {
                             success = false,
@@ -472,6 +504,153 @@ namespace KhoaLuan1.Controllers
                     message = "Có lỗi xảy ra khi xử lý đơn hàng của bạn. Vui lòng thử lại sau."
                 });
             }
+        }
+
+
+
+        [HttpGet("payment-callback")]
+        public async Task<IActionResult> PaymentCallback()
+        {
+            try
+            {
+                // Log tất cả tham số từ VNPay
+                foreach (var key in HttpContext.Request.Query.Keys)
+                {
+                    _logger.LogInformation($"VNPay callback: {key}={HttpContext.Request.Query[key]}");
+                }
+
+                var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
+                var orderId = int.Parse(response.OrderId);
+
+                _logger.LogInformation($"VNPay callback for order {orderId}: Success={response.Success}, ResponseCode={response.VnPayResponseCode}");
+
+                // Kiểm tra đơn hàng
+                var order = await _context.Orders.FindAsync(orderId);
+                if (order == null)
+                {
+                    _logger.LogError("Order not found: {OrderId}", orderId);
+                    return Redirect($"{_configuration["ClientUrl"]}/payment/failed?message=Order not found");
+                }
+
+                // Chỉ xử lý nếu đơn hàng đang ở trạng thái Pending
+                if (order.PaymentStatus != "Pending")
+                {
+                    _logger.LogWarning("Order {OrderId} already processed. Current status: {Status}",
+                        orderId, order.PaymentStatus);
+
+                    if (order.PaymentStatus == "Paid")
+                        return Redirect($"{_configuration["ClientUrl"]}/payment/success?orderId={orderId}");
+                    else
+                        return Redirect($"{_configuration["ClientUrl"]}/payment/failed?orderId={orderId}");
+                }
+
+                // Kiểm tra mã phản hồi của VNPay một cách rõ ràng
+                var vnpResponseCode = HttpContext.Request.Query["vnp_ResponseCode"].ToString();
+
+                // Mã "00" là thanh toán thành công
+                if (response.Success && vnpResponseCode == "00")
+                {
+                    // Cập nhật thông tin thanh toán thành công
+                    order.PaymentStatus = "Paid";
+                    order.PaymentDate = DateTime.UtcNow;
+                    order.TransactionId = response.TransactionId;
+
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("Payment successful for order {OrderId}", orderId);
+
+                    return Redirect($"{_configuration["ClientUrl"]}/payment/success?orderId={orderId}");
+                }
+                else
+                {
+                    // Ghi rõ lý do thất bại
+                    string failureReason = vnpResponseCode switch
+                    {
+                        "01" => "Giao dịch đã tồn tại",
+                        "02" => "Merchant không hợp lệ",
+                        "03" => "Dữ liệu gửi sang không đúng định dạng",
+                        "04" => "Khởi tạo GD không thành công do Website đang bị tạm khóa",
+                        "05" => "Giao dịch không thành công do: Quý khách nhập sai mật khẩu thanh toán quá số lần quy định",
+                        "06" => "Giao dịch không thành công do Quý khách nhập sai mật khẩu thanh toán",
+                        "07" => "Trừ tiền thành công. Giao dịch bị nghi ngờ",
+                        "09" => "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng chưa đăng ký dịch vụ InternetBanking",
+                        "10" => "Giao dịch không thành công do: Khách hàng xác thực thông tin thẻ/tài khoản không đúng quá 3 lần",
+                        "11" => "Giao dịch không thành công do: Đã hết hạn chờ thanh toán",
+                        "12" => "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa",
+                        "24" => "Giao dịch không thành công do: Khách hàng hủy giao dịch",
+                        "51" => "Giao dịch không thành công do: Tài khoản của quý khách không đủ số dư để thực hiện giao dịch",
+                        "65" => "Giao dịch không thành công do: Tài khoản của Quý khách đã vượt quá hạn mức giao dịch trong ngày",
+                        "75" => "Ngân hàng thanh toán đang bảo trì",
+                        "79" => "Giao dịch không thành công do: KH nhập sai mật khẩu thanh toán quá số lần quy định",
+                        "99" => "Người dùng hủy giao dịch",
+                        _ => $"Giao dịch thất bại với mã lỗi: {vnpResponseCode}"
+                    };
+
+                    // Đánh dấu là thanh toán thất bại
+                    order.PaymentStatus = "Failed";
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogWarning("Payment failed for order {OrderId}. Reason: {Reason}", orderId, failureReason);
+
+                    return Redirect($"{_configuration["ClientUrl"]}/payment/failed?orderId={orderId}&message={WebUtility.UrlEncode(failureReason)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing VNPay callback");
+                return Redirect($"{_configuration["ClientUrl"]}/payment/failed?message=System error");
+            }
+        }
+
+        [HttpPost("create-payment")]
+        public IActionResult CreatePaymentUrl([FromBody] PaymentRequest request)
+        {
+            try
+            {
+                var paymentUrl = _vnPayService.CreatePaymentUrl(request, HttpContext);
+
+                // Lưu thông tin đơn hàng tạm thời vào session
+                HttpContext.Session.SetString($"Order_{request.OrderId}", System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    OrderId = request.OrderId,
+                    CreatedDate = DateTime.UtcNow
+                }));
+
+                return Ok(new { success = true, paymentUrl });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi khi tạo URL thanh toán VNPay");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi tạo URL thanh toán" });
+            }
+        }
+
+        private string RemoveDiacritics(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return text;
+
+            text = text.Normalize(NormalizationForm.FormD);
+            var chars = text.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark).ToArray();
+            return new string(chars).Normalize(NormalizationForm.FormC);
+        }
+
+        [HttpGet("check-payment/{orderId}")]
+        public async Task<IActionResult> CheckPaymentStatus(int orderId)
+        {
+            var order = await _context.Orders.FindAsync(orderId);
+            if (order == null)
+            {
+                return NotFound(new { success = false, message = "Đơn hàng không tồn tại" });
+            }
+
+            return Ok(new
+            {
+                success = true,
+                paymentStatus = order.PaymentStatus,
+                orderStatus = order.Status,
+                paidAmount = order.PaymentStatus == "Paid" ? order.TotalAmount : 0,
+                paymentDate = order.PaymentDate
+            });
         }
 
         [HttpPost("get-user-location")]
@@ -1129,75 +1308,7 @@ namespace KhoaLuan1.Controllers
             return baseFee + extraFee;
         }
 
-        [HttpGet("vnpay-return")]
-        public async Task<IActionResult> VNPayReturn()
-        {
-            // Lấy toàn bộ query parameters từ URL
-            var queryCollection = HttpContext.Request.Query;
-
-            // Validate signature bằng cách truyền trực tiếp IQueryCollection
-            if (!_vnPayService.ValidatePayment(queryCollection))
-            {
-                return BadRequest(new { success = false, message = "Invalid signature" });
-            }
-            var vnpResponse = queryCollection.ToDictionary(
-                k => k.Key,
-                v => v.Value.ToString());
-
-            // Kiểm tra mã phản hồi
-            if (!vnpResponse.ContainsKey("vnp_ResponseCode") || vnpResponse["vnp_ResponseCode"] != "00")
-            {
-                var errorMessage = vnpResponse.ContainsKey("vnp_ResponseMessage")
-                    ? $"Payment failed: {vnpResponse["vnp_ResponseMessage"]}"
-                    : "Payment failed";
-
-                return BadRequest(new { success = false, message = errorMessage });
-            }
-
-            // Lấy thông tin đơn hàng
-            if (!vnpResponse.ContainsKey("vnp_OrderInfo"))
-            {
-                return BadRequest(new { success = false, message = "Missing order information" });
-            }
-
-            var orderIdStr = vnpResponse["vnp_OrderInfo"].Split(' ').Last();
-            if (!int.TryParse(orderIdStr, out var orderId))
-            {
-                return BadRequest(new { success = false, message = "Invalid order ID format" });
-            }
-
-            // Tìm và cập nhật đơn hàng
-            var order = await _context.Orders.FindAsync(orderId);
-            if (order == null)
-            {
-                return NotFound(new { success = false, message = "Order not found" });
-            }
-
-            // Cập nhật trạng thái thanh toán
-            order.PaymentStatus = "Paid";
-            order.PaymentDate = DateTime.UtcNow;
-
-            if (vnpResponse.ContainsKey("vnp_TransactionNo"))
-            {
-                order.TransactionId = vnpResponse["vnp_TransactionNo"];
-            }
-
-            try
-            {
-                await _context.SaveChangesAsync();
-
-                // Gửi thông báo hoặc xử lý tiếp theo nếu cần
-                await _hubContext.Clients.Group($"order-{orderId}")
-                    .SendAsync("PaymentSuccess", new { orderId = orderId });
-
-                return Redirect($"{_configuration["ClientUrl"]}/order-success/{orderId}?payment=success");
-            }
-            catch (Exception ex)
-            {
-                // Log lỗi ở đây
-                return StatusCode(500, new { success = false, message = $"Error updating order: {ex.Message}" });
-            }
-        }
+       
 
         //API Xem các đơn hàng đang giao hoặc đã giao của từng nhà hàng, tài xế, khách hàng
         [HttpGet("delivery-orders")]
@@ -1464,8 +1575,118 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Đơn hàng đã được hủy thành công." });
         }
 
-    }
+        [HttpGet("payment-success/{orderId}")]
+        public async Task<IActionResult> PaymentSuccess(long orderId, string vnp_ResponseCode, string vnp_TransactionNo)
+        {
+            try
+            {
+                // 1. Kiểm tra đơn hàng trong database
+                var order = await _context.Orders.FindAsync(orderId);
+                if (order == null)
+                {
+                    return RedirectToAction("PaymentFailed", new
+                    {
+                        message = $"Không tìm thấy đơn hàng #{orderId}"
+                    });
+                }
+                // 2. Kiểm tra mã phản hồi từ VNPay
+                if (vnp_ResponseCode != "00") // 00 là mã thành công
+                {
+                    return RedirectToAction("PaymentFailed", new
+                    {
+                        message = $"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}",
+                        orderId = orderId
+                    });
+                }
+                // 3. Cập nhật trạng thái đơn hàng nếu chưa cập nhật
+                if (order.PaymentStatus != "Paid")
+                {
+                    order.PaymentStatus = "Paid";
+                    order.TransactionId = vnp_TransactionNo;
+                    order.PaymentDate = DateTime.UtcNow;
+                    order.Status = "Processing"; // Chuyển sang trạng thái đang xử lý
 
+                    await _context.SaveChangesAsync();
+
+                    // Gửi thông báo/email xác nhận
+                   
+                }
+                // 4. Trả về kết quả thành công
+                return Ok(new PaymentResultViewModel
+                {
+                    Success = true,
+                    OrderId = orderId,
+                    Amount = order.TotalAmount,
+                    TransactionId = vnp_TransactionNo,
+                    PaymentDate = DateTime.UtcNow,
+                    Message = "Thanh toán thành công. Đơn hàng đang được xử lý."
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Lỗi khi xử lý kết quả thanh toán thành công cho đơn hàng {orderId}");
+                return BadRequest(new
+                {
+                    message = "Đã xảy ra lỗi khi xử lý kết quả thanh toán",
+                    orderId = orderId
+                });
+            }
+        }
+
+        [HttpGet("payment-failed")]
+        public async Task<IActionResult> PaymentFailed(string message, long? orderId = null)
+        {
+            try
+            {
+                PaymentResultViewModel model = new()
+                {
+                    Success = false,
+                    Message = message
+                };
+                // Nếu có orderId, thêm thông tin đơn hàng
+                if (orderId.HasValue)
+                {
+                    var order = await _context.Orders.FindAsync(orderId.Value);
+                    if (order != null)
+                    {
+                        model.OrderId = order.OrderId;
+                        model.Amount = order.TotalAmount;
+
+                        // Cập nhật trạng thái nếu cần
+                        if (order.PaymentStatus != "Failed")
+                        {
+                            order.PaymentStatus = "Failed";
+                            await _context.SaveChangesAsync();
+                        }
+                    }
+                }
+                return Ok(model);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Lỗi khi xử lý trang thanh toán thất bại. OrderId: {orderId}");
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = "Đã xảy ra lỗi hệ thống. Vui lòng liên hệ hỗ trợ."
+                });
+            }
+        }
+
+    }
+    public class PaymentResultViewModel
+    {
+        public bool Success { get; set; }
+        public long? OrderId { get; set; }
+        public decimal Amount { get; set; }
+        public string? TransactionId { get; set; }
+        public DateTime? PaymentDate { get; set; }
+        public string Message { get; set; }
+
+        // Thêm các thông tin khác nếu cần
+        public string? CustomerName { get; set; }
+        public string? OrderDetails { get; set; }
+    }
     public class CreateOrderRequest
     {
         public string Address { get; set; }

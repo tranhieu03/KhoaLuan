@@ -7,7 +7,6 @@ const OrderChat = ({ orderId }) => {
   const [messages, setMessages] = useState([]);
   const [userInfo, setUserInfo] = useState(null);
   const [newMessage, setNewMessage] = useState('');
-  const [receiverId, setReceiverId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [hubConnection, setHubConnection] = useState(null);
@@ -35,7 +34,7 @@ const OrderChat = ({ orderId }) => {
         });
 
         await connection.start();
-        // Connect to the hub without calling JoinGroup
+        // Không gọi JoinGroup vì phương thức này không tồn tại
         console.log("SignalR connection established successfully");
         setHubConnection(connection);
       } catch (err) {
@@ -52,6 +51,7 @@ const OrderChat = ({ orderId }) => {
       }
     };
   }, [orderId]);
+
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
@@ -69,18 +69,15 @@ const OrderChat = ({ orderId }) => {
 
     checkLoginStatus();
   }, []);
-  // Fetch chat participants
+
+  // Fetch chat participants - Chỉ lấy người giao hàng, bỏ nhà hàng
   useEffect(() => {
     const fetchParticipants = async () => {
       try {
         const response = await axios.get(`https://localhost:44308/api/Chat/participants/${orderId}`);
-        setParticipants(response.data);
-
-        // Default to the first non-customer participant for messaging
-        const nonCustomers = response.data.filter(p => p.role !== "Customer");
-        if (nonCustomers.length > 0) {
-          setReceiverId(nonCustomers[0].userId);
-        }
+        // Lọc bỏ người bán (nhà hàng), chỉ giữ người giao hàng
+        const deliveryParticipants = response.data.filter(p => p.role === "DeliveryPerson");
+        setParticipants(deliveryParticipants);
       } catch (err) {
         console.error("Error fetching participants: ", err);
         setError("Không thể tải thông tin người tham gia. Vui lòng thử lại sau.");
@@ -121,10 +118,35 @@ const OrderChat = ({ orderId }) => {
     if (!newMessage.trim()) return;
 
     try {
+      // Lấy ID của người giao hàng từ danh sách participants
+      const deliveryPerson = participants[0];
+      
+      if (!deliveryPerson) {
+        setError("Không tìm thấy người giao hàng để gửi tin nhắn.");
+        return;
+      }
+
+      // Tạo object tin nhắn tạm thời để hiển thị ngay lập tức
+      const tempMessage = {
+        messageId: `temp-${Date.now()}`,
+        orderId: orderId,
+        senderId: userInfo.userId,
+        senderName: userInfo.fullName,
+        receiverId: deliveryPerson.userId,
+        content: newMessage,
+        sentAt: new Date().toISOString(),
+        isRead: false,
+        isPrivate: false
+      };
+
+      // Thêm tin nhắn tạm thời vào state ngay lập tức
+      setMessages(prevMessages => [...prevMessages, tempMessage]);
+      
+      // Gửi tin nhắn tới API
       await axios.post('https://localhost:44308/api/Chat/send', {
         orderId,
         content: newMessage,
-        receiverId: receiverId
+        receiverId: deliveryPerson.userId
       });
       
       setNewMessage('');
@@ -153,12 +175,9 @@ const OrderChat = ({ orderId }) => {
       <div className="bg-gray-100 p-3 border-b">
         <h2 className="font-semibold">Chat đơn hàng #{orderId}</h2>
         <div className="text-sm text-gray-600">
-          {participants.filter(p => p.role !== "Customer").map((p, index) => (
-            <span key={p.userId}>
-              {p.role === "Seller" ? `${p.restaurantName}` : `${p.fullName} (Người giao hàng)`}
-              {index < participants.filter(p => p.role !== "Customer").length - 1 ? ', ' : ''}
-            </span>
-          ))}
+          {participants.length > 0 
+            ? `${participants[0].fullName} (Người giao hàng)`
+            : "Đang chờ người giao hàng..."}
         </div>
       </div>
 
@@ -171,7 +190,7 @@ const OrderChat = ({ orderId }) => {
         ) : (
           messages.map((message) => {
             // Get current user ID from session storage
-            const currentUserId = userInfo.userId;
+            const currentUserId = userInfo?.userId;
             const isSentByMe = message.senderId === currentUserId;
             
             return (
@@ -211,42 +230,21 @@ const OrderChat = ({ orderId }) => {
 
       {/* Message input */}
       <div className="border-t p-3">
-        <form onSubmit={handleSendMessage} className="flex flex-col">
-          <div className="mb-2">
-            <label className="text-sm font-medium text-gray-700">Gửi đến:</label>
-            <select 
-              className="ml-2 border rounded p-1 text-sm"
-              value={receiverId || ''}
-              onChange={(e) => setReceiverId(parseInt(e.target.value))}
-            >
-              {participants
-                .filter(p => p.role !== "Customer")
-                .map(p => (
-                  <option key={p.userId} value={p.userId}>
-                    {p.role === "Seller" 
-                      ? `${p.restaurantName} (Nhà hàng)` 
-                      : `${p.fullName} (Người giao hàng)`}
-                  </option>
-                ))
-              }
-            </select>
-          </div>
-          <div className="flex">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Nhập tin nhắn của bạn..."
-              className="flex-1 border rounded-l p-2"
-            />
-            <button 
-              type="submit" 
-              className="bg-blue-500 text-white px-4 rounded-r hover:bg-blue-600"
-              disabled={!newMessage.trim()}
-            >
-              Gửi
-            </button>
-          </div>
+        <form onSubmit={handleSendMessage} className="flex">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Nhập tin nhắn của bạn..."
+            className="flex-1 border rounded-l p-2"
+          />
+          <button 
+            type="submit" 
+            className="bg-blue-500 text-white px-4 rounded-r hover:bg-blue-600"
+            disabled={!newMessage.trim() || participants.length === 0}
+          >
+            Gửi
+          </button>
         </form>
       </div>
     </div>
