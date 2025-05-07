@@ -17,6 +17,15 @@ import CreateRestaurant from "./components/Restaurant";
 import Order from "./components/Order";
 import OrderDetailsPage from "./components/OrderDetailsPage";
 import ReviewOrder from "./components/ReviewOder";
+import UserProfile from "./components/UserProfile";
+import AdminLogin from "./components/AdminLogin";
+import AdminDashboard from "./components/AdminDashboard";
+import RestaurantManagement from "./components/AdminRestaurants";
+import RevenueReportComponent from "./components/RestaurantRevenueReport";
+import VoucherManagement from "./components/AdminVoucher";
+import DeliveryPersonProfile from "./components/DeliveryPersonProfile";
+import DeliveryRevenue from "./components/DeliveryRevenue";
+import RestaurantInfo from "./components/RestaurantInfo";
 
 function App() {
   return (
@@ -39,6 +48,15 @@ function App() {
         <Route path="/order" element={<Order />} />
         <Route path="/order-details/:orderId" element={<OrderDetailsPage />} />
         <Route path="/review-order/:orderId" element={<ReviewOrder />} />
+        <Route path="/profile" element={<UserProfile />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/restaurants" element={<RestaurantManagement />} />
+        <Route path="/seller/renue" element={<RevenueReportComponent/>} />
+        <Route path="/admin/voucher" element={<VoucherManagement />} />
+        <Route path="/delivery/profile" element={<DeliveryPersonProfile />} />
+        <Route path="/delivery/renue" element={<DeliveryRevenue/>}/>
+        <Route path="/restaurant/info" element={<RestaurantInfo />} />
       </Routes>
     </Router>
   );

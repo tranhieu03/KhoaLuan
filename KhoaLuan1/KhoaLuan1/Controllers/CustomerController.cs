@@ -1,4 +1,5 @@
 ﻿using KhoaLuan1.Models;
+using KhoaLuan1.Service;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,122 +11,189 @@ namespace KhoaLuan1.Controllers
     public class CustomerController : ControllerBase
     {
         private readonly KhoaluantestContext _context;
+        private readonly ILogger<CustomerController> _logger;
+        private readonly MapService _mapService;
 
-        public CustomerController(KhoaluantestContext context)
+        public CustomerController(KhoaluantestContext context, ILogger<CustomerController> logger, MapService mapService)
         {
             _context = context;
+            _logger = logger;
+            _mapService = mapService;
         }
 
 
-        //API Xem toàn bộ danh sách món ăn
         [HttpGet("all-products")]
         public async Task<IActionResult> GetAllProducts(
      int page = 1,
      int pageSize = 10,
      string searchTerm = "",
-     int? foodCategoryId = null, // Đổi thành foodCategoryId
+     int? foodCategoryId = null,
      decimal? minPrice = null,
      decimal? maxPrice = null,
      string sortBy = "name",
-     bool sortAscending = true)
+     bool sortAscending = true,
+     double? latitude = null,  // Thêm tham số vị trí người dùng
+     double? longitude = null) // Thêm tham số vị trí người dùng
         {
-            var query = _context.Products
-                .Include(p => p.Restaurant)
-                .Include(p => p.FoodCategory)
-                .Where(p => p.Status == "Active");
-
-            if (!string.IsNullOrEmpty(searchTerm))
+            try
             {
-                query = query.Where(p =>
-                    p.Name.Contains(searchTerm) ||
-                    p.Description.Contains(searchTerm));
-            }
-
-            // Lọc theo ID thay vì tên
-            if (foodCategoryId.HasValue)
-            {
-                query = query.Where(p => p.FoodCategoryId == foodCategoryId.Value);
-            }
-
-            if (minPrice.HasValue)
-            {
-                query = query.Where(p => p.Price >= minPrice);
-            }
-
-            if (maxPrice.HasValue)
-            {
-                query = query.Where(p => p.Price <= maxPrice);
-            }
-
-            // Apply sorting
-            switch (sortBy.ToLower())
-            {
-                case "price":
-                    query = sortAscending ?
-                        query.OrderBy(p => p.Price) :
-                        query.OrderByDescending(p => p.Price);
-                    break;
-                case "rating":
-                    query = sortAscending ?
-                        query.OrderBy(p => p.AverageRating) :
-                        query.OrderByDescending(p => p.AverageRating);
-                    break;
-                case "newest":
-                    query = sortAscending ?
-                        query.OrderBy(p => p.ProductId) :
-                        query.OrderByDescending(p => p.ProductId);
-                    break;
-                default: // Default sort by name
-                    query = sortAscending ?
-                        query.OrderBy(p => p.Name) :
-                        query.OrderByDescending(p => p.Name);
-                    break;
-            }
-
-            // Lấy tổng số sản phẩm trước
-            var totalProducts = await query.CountAsync();
-
-            // Lấy danh sách sản phẩm theo trang nhưng KHÔNG xử lý URL trong truy vấn
-            var products = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(p => new ProductResponseDto
+                // Lấy vị trí người dùng nếu không được cung cấp
+                if (!latitude.HasValue || !longitude.HasValue)
                 {
-                    ProductId = p.ProductId,
-                    Name = p.Name,
-                    Description = p.Description,
-                    Price = p.Price,
-                    ImageUrl = p.ImageUrl, // Không xử lý URL trong LINQ query
-                    StockQuantity = (int)p.StockQuantity,
-                    AverageRating = p.AverageRating,
-                    Restaurant = new RestaurantInfoDto
+                    var userId = HttpContext.Session.GetInt32("UserId");
+                    if (userId.HasValue)
                     {
-                        RestaurantId = p.Restaurant.RestaurantId,
-                        Name = p.Restaurant.Name,
-                        Address = p.Restaurant.Address
-                    },
-                    FoodCategory = p.FoodCategory != null ? new FoodCategoryDto
-                    {
-                        FoodCategoryId = p.FoodCategory.FoodCategoryId,
-                        Name = p.FoodCategory.Name
-                    } : null
-                })
-                .ToListAsync();
+                        var userLocation = await _mapService.GetUserLocation(userId);
+                        if (userLocation.latitude != 0 && userLocation.longitude != 0)
+                        {
+                            latitude = userLocation.latitude;
+                            longitude = userLocation.longitude;
+                        }
+                    }
+                }
 
-            // Xử lý URL sau khi đã lấy dữ liệu từ database
-            foreach (var product in products)
-            {
-                product.ImageUrl = FormatImageUrl(product.ImageUrl);
+                var query = _context.Products
+                    .Include(p => p.Restaurant)
+                    .Include(p => p.FoodCategory)
+                    .Where(p => p.Status == "Active");
+
+                if (!string.IsNullOrEmpty(searchTerm))
+                {
+                    query = query.Where(p =>
+                        p.Name.Contains(searchTerm) ||
+                        p.Description.Contains(searchTerm));
+                }
+
+                if (foodCategoryId.HasValue)
+                {
+                    query = query.Where(p => p.FoodCategoryId == foodCategoryId.Value);
+                }
+
+                if (minPrice.HasValue)
+                {
+                    query = query.Where(p => p.Price >= minPrice);
+                }
+
+                if (maxPrice.HasValue)
+                {
+                    query = query.Where(p => p.Price <= maxPrice);
+                }
+
+                // Lấy danh sách sản phẩm trước khi áp dụng sắp xếp theo khoảng cách
+                var products = await query
+                    .Select(p => new
+                    {
+                        Product = p,
+                        RestaurantLatitude = p.Restaurant.Latitude,
+                        RestaurantLongitude = p.Restaurant.Longitude
+                    })
+                    .ToListAsync();
+
+                // Tổng số sản phẩm
+                var totalProducts = products.Count;
+
+                // Tính khoảng cách và sắp xếp nếu có vị trí người dùng
+                var productsWithDistance = new List<(ProductResponseDto ProductDto, double? Distance)>();
+
+                foreach (var item in products)
+                {
+                    var productDto = new ProductResponseDto
+                    {
+                        ProductId = item.Product.ProductId,
+                        Name = item.Product.Name,
+                        Description = item.Product.Description,
+                        Price = item.Product.Price,
+                        ImageUrl = FormatImageUrl(item.Product.ImageUrl),
+                        StockQuantity = (int)item.Product.StockQuantity,
+                        AverageRating = item.Product.AverageRating,
+                        Restaurant = new RestaurantInfoDto
+                        {
+                            RestaurantId = item.Product.Restaurant.RestaurantId,
+                            Name = item.Product.Restaurant.Name,
+                            Address = item.Product.Restaurant.Address,
+                            Latitude = (decimal?)item.RestaurantLatitude,
+                            Longitude = (decimal?)item.RestaurantLongitude
+                        },
+                        FoodCategory = item.Product.FoodCategory != null ? new FoodCategoryDto
+                        {
+                            FoodCategoryId = item.Product.FoodCategory.FoodCategoryId,
+                            Name = item.Product.FoodCategory.Name
+                        } : null
+                    };
+
+                    double? distance = null;
+                    if (latitude.HasValue && longitude.HasValue &&
+                        item.RestaurantLatitude.HasValue && item.RestaurantLongitude.HasValue)
+                    {
+                        // Sử dụng dịch vụ bản đồ để tính khoảng cách
+                        distance = await _mapService.CalculateDistanceAsync(
+                            latitude.Value, longitude.Value,
+                            item.RestaurantLatitude.Value, item.RestaurantLongitude.Value);
+
+                        productDto.Distance = distance; // Thêm khoảng cách vào DTO
+                    }
+
+                    productsWithDistance.Add((productDto, distance));
+                }
+
+                // Áp dụng sắp xếp
+                IEnumerable<ProductResponseDto> sortedProducts;
+
+                if (sortBy.ToLower() == "distance" && latitude.HasValue && longitude.HasValue)
+                {
+                    // Sắp xếp theo khoảng cách
+                    sortedProducts = sortAscending
+                        ? productsWithDistance.OrderBy(p => p.Distance ?? double.MaxValue).Select(p => p.ProductDto)
+                        : productsWithDistance.OrderByDescending(p => p.Distance ?? double.MinValue).Select(p => p.ProductDto);
+                }
+                else
+                {
+                    // Sắp xếp theo các tiêu chí khác
+                    switch (sortBy.ToLower())
+                    {
+                        case "price":
+                            sortedProducts = sortAscending
+                                ? productsWithDistance.OrderBy(p => p.ProductDto.Price).Select(p => p.ProductDto)
+                                : productsWithDistance.OrderByDescending(p => p.ProductDto.Price).Select(p => p.ProductDto);
+                            break;
+                        case "rating":
+                            sortedProducts = sortAscending
+                                ? productsWithDistance.OrderBy(p => p.ProductDto.AverageRating).Select(p => p.ProductDto)
+                                : productsWithDistance.OrderByDescending(p => p.ProductDto.AverageRating).Select(p => p.ProductDto);
+                            break;
+                        case "newest":
+                            sortedProducts = sortAscending
+                                ? productsWithDistance.OrderBy(p => p.ProductDto.ProductId).Select(p => p.ProductDto)
+                                : productsWithDistance.OrderByDescending(p => p.ProductDto.ProductId).Select(p => p.ProductDto);
+                            break;
+                        default: // Default sort by name
+                            sortedProducts = sortAscending
+                                ? productsWithDistance.OrderBy(p => p.ProductDto.Name).Select(p => p.ProductDto)
+                                : productsWithDistance.OrderByDescending(p => p.ProductDto.Name).Select(p => p.ProductDto);
+                            break;
+                    }
+                }
+
+                // Phân trang sau khi đã sắp xếp
+                var pagedProducts = sortedProducts
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                return Ok(new PaginatedResponse<ProductResponseDto>
+                {
+                    TotalItems = totalProducts,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalPages = (int)Math.Ceiling(totalProducts / (double)pageSize),
+                    Items = pagedProducts
+                });
             }
-
-            return Ok(new PaginatedResponse<ProductResponseDto>
+            catch (Exception ex)
             {
-                TotalItems = totalProducts,
-                Page = page,
-                PageSize = pageSize,
-                TotalPages = (int)Math.Ceiling(totalProducts / (double)pageSize),
-                Items = products
-            });
+                _logger.LogError(ex, "Lỗi khi lấy danh sách sản phẩm với sắp xếp theo khoảng cách");
+                return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi xử lý yêu cầu" });
+            }
         }
 
         // Helper method to format image URLs correctly
@@ -155,13 +223,12 @@ namespace KhoaLuan1.Controllers
                 return BadRequest(new { message = "Invalid restaurant ID." });
 
             var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+           
 
             if (userId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Customer")
-                return BadRequest(new { message = "Only customers are allowed to view products by restaurant." });
+           
 
             var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
             if (restaurant == null)
@@ -189,13 +256,12 @@ namespace KhoaLuan1.Controllers
         public async Task<IActionResult> GetProductDetail(int productId)
         {
             var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+           
 
             if (userId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Customer")
-                return BadRequest(new { message = "Only customers are allowed to view product details." });
+           
 
             var product = await _context.Products
                 .Include(p => p.Restaurant)
@@ -333,9 +399,9 @@ namespace KhoaLuan1.Controllers
         public string ImageUrl { get; set; }
         public int StockQuantity { get; set; }
         public decimal? AverageRating { get; set; }
-        public int ReviewCount { get; set; }
         public RestaurantInfoDto Restaurant { get; set; }
         public FoodCategoryDto FoodCategory { get; set; }
+        public double? Distance { get; set; } // Thêm trường khoảng cách
     }
 
     public class RestaurantInfoDto
@@ -345,6 +411,8 @@ namespace KhoaLuan1.Controllers
         public string Address { get; set; }
         public string ImageUrl { get; set; }
         public double AverageRating { get; set; }
+        public decimal? Latitude { get; set; }  // Thêm vĩ độ
+        public decimal? Longitude { get; set; } // Thêm kinh độ
     }
 
     public class FoodCategoryDto

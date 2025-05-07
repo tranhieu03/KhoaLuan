@@ -31,7 +31,11 @@ public partial class User
 
     public string? VehicleNumber { get; set; }
 
+    public string OriginRole { get; set; } = null!;
+
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
+
+    public virtual ICollection<DeliveryTracking> DeliveryTrackings { get; set; } = new List<DeliveryTracking>();
 
     public virtual ICollection<Message> MessageReceivers { get; set; } = new List<Message>();
 

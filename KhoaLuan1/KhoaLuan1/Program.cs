@@ -1,4 +1,5 @@
 ﻿using KhoaLuan1.Hubs;
+using KhoaLuan1.Middleware;
 using KhoaLuan1.Models;
 using KhoaLuan1.Service;
 using KhoaLuan1.Services;
@@ -11,7 +12,9 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<EmailService>();
+builder.Services.AddHttpClient<ZaloPayService>();
+builder.Services.AddScoped<ZaloPayService>();
+builder.Services.AddScoped<EmailService>();
 // Đăng ký HttpClient với cấu hình riêng cho MapService
 builder.Services.AddHttpClient<MapService>(client =>
 {
@@ -22,8 +25,11 @@ builder.Services.AddHttpClient<MapService>(client =>
 
 // Đăng ký MapService
 builder.Services.AddScoped<MapService>();
-builder.Services.AddSingleton<VNPayService>();
-builder.Services.AddScoped<IVNPayService, VNPayService>();
+builder.Services.AddHostedService<OrderBackgroundService>();
+builder.Services.AddHostedService<PaymentTimeoutService>();
+builder.Services.AddScoped<VoucherService>();
+builder.Services.AddScoped<VNPayService>();
+builder.Services.AddScoped<IVnPayService, VNPayService>();
 builder.Services.AddHostedService<OrderAutoCompletionService>();
 
 builder.Services.AddHttpContextAccessor();
@@ -74,7 +80,7 @@ app.UseCors("AllowReactApp");
 
 // Add Session Middleware
 app.UseSession();
-
+app.UseMiddleware<SignalRAuthMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

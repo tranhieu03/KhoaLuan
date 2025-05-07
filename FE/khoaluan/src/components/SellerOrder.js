@@ -72,22 +72,66 @@ function SellerOrders() {
 
   const confirmOrder = async (orderId) => {
     try {
-      console.log("Đang xác nhận đơn hàng:", orderId);
-      const response = await apiClient.post(`/Order/confirm-order/${orderId}`);
-      console.log("Kết quả xác nhận đơn hàng:", response.data);
+      // Tạo FormData nếu có file ảnh
+      const formData = new FormData();
+      
+      // Thêm các trường dữ liệu vào formData
+      formData.append("orderId", orderId);
+      
+      // Gửi request với header phù hợp
+      const response = await apiClient.post(
+        `/Order/confirm-order/${orderId}`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data"
+          }
+        }
+      );
       
       if (response.data.success) {
-        // Update the order status locally
         setOrders(orders.map(order => 
           order.orderId === orderId ? { ...order, status: "ReadyForDelivery" } : order
         ));
         alert(response.data.message || "Đơn hàng đã được xác nhận thành công!");
-      } else {
-        alert(response.data.message || "Có lỗi xảy ra khi xác nhận đơn hàng.");
       }
     } catch (error) {
       console.error("Lỗi khi xác nhận đơn hàng:", error);
       alert(error.response?.data?.message || "Lỗi khi xác nhận đơn hàng. Vui lòng thử lại!");
+    }
+  };
+
+  // Thêm hàm xử lý upload ảnh
+  const handleImageUpload = async (orderId, file) => {
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      
+      const response = await apiClient.post(
+        `/Order/upload-order-image/${orderId}`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data"
+          }
+        }
+      );
+      
+      if (response.data.success) {
+        // Cập nhật UI với ảnh mới
+        setOrders(orders.map(order => 
+          order.orderId === orderId ? { 
+            ...order, 
+            items: order.items.map(item => ({
+              ...item,
+              productImage: response.data.imageUrl || item.productImage
+            }))
+          } : order
+        ));
+      }
+    } catch (error) {
+      console.error("Lỗi khi upload ảnh:", error);
+      alert("Lỗi khi upload ảnh: " + (error.response?.data?.message || error.message));
     }
   };
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Threading.Tasks;
 using KhoaLuan1.Models;
@@ -128,7 +129,124 @@ namespace KhoaLuan1.Controllers
                     Message = restaurant != null ? "User có nhà hàng" : "User chưa có nhà hàng"
                 });
             }
+
+        [HttpGet("my-restaurant")]
+        public async Task<ActionResult<RestaurantDetailDTO>> GetMyRestaurant()
+        {
+            // Get userId from session
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null)
+                return Unauthorized(new { message = "User is not logged in." });
+
+            if (role != "seller")
+                return Unauthorized(new { message = "Only sellers can access their restaurant information." });
+
+            // Find the restaurant owned by this seller
+            var restaurant = await _context.Restaurants
+                .Include(r => r.Seller)
+                .FirstOrDefaultAsync(r => r.SellerId == userId.Value);
+
+            if (restaurant == null)
+                return NotFound(new { message = "You don't have a registered restaurant." });
+
+            // Map to DTO
+            var restaurantDto = new RestaurantDetailDTO
+            {
+                RestaurantId = restaurant.RestaurantId,
+                Name = restaurant.Name,
+                Address = restaurant.Address,
+                PhoneNumber = restaurant.PhoneNumber,
+                SellerId = restaurant.SellerId,
+                Status = restaurant.Status,
+                RestaurantImage = restaurant.RestaurantImage,
+                SellerName = restaurant.Seller.FullName,
+                SellerEmail = restaurant.Seller.Email,
+                SellerPhone = restaurant.Seller.PhoneNumber
+            };
+
+            return Ok(restaurantDto);
         }
+
+        // PUT: api/Restaurant/update
+        [HttpPut("update")]
+        public async Task<IActionResult> UpdateRestaurant([FromForm] UpdateRestaurantRequest model)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
+
+            if (userId == null)
+                return Unauthorized(new { message = "User is not logged in." });
+
+            if (role != "seller")
+                return Unauthorized(new { message = "Only sellers can update their restaurant information." });
+
+            // Find the restaurant owned by this seller
+            var restaurant = await _context.Restaurants
+                .FirstOrDefaultAsync(r => r.SellerId == userId.Value);
+
+            if (restaurant == null)
+                return NotFound(new { message = "You don't have a registered restaurant." });
+
+            try
+            {
+                // Update restaurant information
+                restaurant.Name = model.Name;
+
+                // Only update address and coordinates if address is provided
+                if (!string.IsNullOrEmpty(model.Address))
+                {
+                    restaurant.Address = model.Address;
+
+                    // Update coordinates if needed
+                    if (model.Latitude.HasValue && model.Longitude.HasValue)
+                    {
+                        restaurant.Latitude = model.Latitude.Value;
+                        restaurant.Longitude = model.Longitude.Value;
+                    }
+                    else
+                    {
+                        // Get coordinates from the address
+                        (double lat, double lng) = await _mapService.GetCoordinates(model.Address);
+                        restaurant.Latitude = lat;
+                        restaurant.Longitude = lng;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(model.PhoneNumber))
+                {
+                    restaurant.PhoneNumber = model.PhoneNumber;
+                }
+
+                // Update restaurant image if provided
+                if (model.RestaurantImage != null)
+                {
+                    // Delete the old image if exists
+                    if (!string.IsNullOrEmpty(restaurant.RestaurantImage))
+                    {
+                        var oldImagePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", restaurant.RestaurantImage.TrimStart('/'));
+                        if (System.IO.File.Exists(oldImagePath))
+                        {
+                            System.IO.File.Delete(oldImagePath);
+                        }
+                    }
+
+                    // Save the new image
+                    restaurant.RestaurantImage = await SaveFile(model.RestaurantImage);
+                }
+
+                _context.Entry(restaurant).State = EntityState.Modified;
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Restaurant updated successfully.", restaurant });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+    }
 
     public class CreateRestaurantRequest
     {
@@ -149,5 +267,68 @@ namespace KhoaLuan1.Controllers
         public string? RestaurantName { get; set; }
         public string? RestaurantStatus { get; set; }
         public string? Message { get; set; }
+    }
+    public class RestaurantDetailDTO
+    {
+        public int RestaurantId { get; set; }
+        public string Name { get; set; }
+        public string Address { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Description { get; set; }
+        public int SellerId { get; set; }
+        public string Status { get; set; }
+        public string RestaurantImage { get; set; }
+
+        // Include seller information without sensitive data
+        public string SellerName { get; set; }
+        public string SellerEmail { get; set; }
+        public string SellerPhone { get; set; }
+    }
+    public class UpdateRestaurantRequest
+    {
+        [Required]
+        [StringLength(100)]
+        public string Name { get; set; }
+
+        public string Address { get; set; }
+
+        [StringLength(15)]
+        [RegularExpression(@"^[0-9]+$", ErrorMessage = "Phone number must contain only digits")]
+        public string PhoneNumber { get; set; }
+
+
+        public IFormFile RestaurantImage { get; set; }
+
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+    }
+    // DTO for updating restaurant information
+    public class UpdateRestaurantDTO
+    {
+        [Required]
+        [StringLength(100)]
+        public string Name { get; set; }
+
+        [StringLength(255)]
+        public string Address { get; set; }
+
+        [StringLength(15)]
+        [RegularExpression(@"^[0-9]+$", ErrorMessage = "Phone number must contain only digits")]
+        public string PhoneNumber { get; set; }
+
+        public string Description { get; set; }
+
+        public string RestaurantImage { get; set; }
+    }
+
+    // DTO for restaurant list items (summary view)
+    public class RestaurantListItemDTO
+    {
+        public int RestaurantId { get; set; }
+        public string Name { get; set; }
+        public string Address { get; set; }
+        public string Status { get; set; }
+        public string RestaurantImage { get; set; }
+        public string SellerName { get; set; }
     }
 }

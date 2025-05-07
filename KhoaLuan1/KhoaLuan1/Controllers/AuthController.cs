@@ -37,6 +37,13 @@ namespace KhoaLuan1.Controllers
             if (await _context.Users.AnyAsync(u => u.Email == model.Email))
                 return BadRequest(new { message = "Email đã được sử dụng." });
 
+            // Kiểm tra số lần gửi email còn lại
+            int remainingAttempts = await _emailService.GetRemainingEmailAttemptsAsync(model.Email);
+            if (remainingAttempts <= 0)
+            {
+                return BadRequest(new { message = "Bạn đã gửi quá nhiều email đến địa chỉ này. Vui lòng thử lại sau 24 giờ." });
+            }
+
             // Kiểm tra thông tin bắt buộc cho DeliveryPerson
             if (model.Role == "DeliveryPerson")
             {
@@ -110,11 +117,21 @@ namespace KhoaLuan1.Controllers
                     // Thêm các trường mới
                     FrontIdCardImage = frontIdCardImagePath,
                     BackIdCardImage = backIdCardImagePath,
-                    VehicleNumber = model.VehicleNumber
+                    VehicleNumber = model.VehicleNumber,
+                    OriginRole= "Customer"
+
                 };
 
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
+
+                // Xử lý OTP
+                // Xóa token cũ nếu có
+                var oldTokens = await _context.PasswordResetTokens.Where(t => t.UserId == user.UserId).ToListAsync();
+                if (oldTokens.Any())
+                {
+                    _context.PasswordResetTokens.RemoveRange(oldTokens);
+                }
 
                 // Tạo mã OTP 6 số
                 string otp = new Random().Next(100000, 999999).ToString();
@@ -124,14 +141,14 @@ namespace KhoaLuan1.Controllers
                 {
                     UserId = user.UserId,
                     Token = otp,
-                    Expiration = DateTime.UtcNow.AddMinutes(10) // OTP hết hạn sau 10 phút
+                    Expiration = DateTime.UtcNow.AddSeconds(60) // OTP hết hạn sau 60 giây
                 };
 
                 _context.PasswordResetTokens.Add(resetToken);
                 await _context.SaveChangesAsync();
 
                 // Gửi email chứa OTP
-                string emailBody = $"<h3>Mã OTP để xác nhận tài khoản của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 10 phút.</p>";
+                string emailBody = $"<h3>Mã OTP để xác nhận tài khoản của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 60 giây.</p>";
 
                 bool isSent = await _emailService.SendEmailAsync(user.Email, "Account Verification OTP", emailBody);
 
@@ -166,9 +183,10 @@ namespace KhoaLuan1.Controllers
 
                 return Ok(new
                 {
-                    message = "Đăng ký thành công! OTP đã được gửi đến email, vui lòng xác nhận để hoàn tất đăng ký.",
+                    message = "Đăng ký thành công! OTP đã được gửi đến email, vui lòng xác nhận để hoàn tất đăng ký. Mã OTP có hiệu lực trong 60 giây.",
                     userId = user.UserId,
-                    role = user.Role
+                    role = user.Role,
+                    remainingAttempts = remainingAttempts - 1 // Số lần gửi còn lại sau khi gửi thành công
                 });
             }
             catch (Exception ex)
@@ -205,6 +223,9 @@ namespace KhoaLuan1.Controllers
                 // Xóa token đã sử dụng
                 _context.PasswordResetTokens.Remove(resetToken);
 
+                // Reset số lần gửi email khi xác thực thành công
+                await _emailService.ResetEmailSendCountAsync(user.Email);
+
                 await _context.SaveChangesAsync();
 
                 return Ok(new
@@ -220,27 +241,89 @@ namespace KhoaLuan1.Controllers
                 return StatusCode(500, new { message = "Đã xảy ra lỗi trong quá trình xác thực OTP: " + ex.Message });
             }
         }
+
+
+        
+
         // API Đăng nhập
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest model)
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == model.Email);
+                if (user == null || !BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash))
+                    return Unauthorized(new { message = "Invalid email or password." });
+
+                if (user.Status != "Active")
+                    return Unauthorized(new { message = "Tài khoản của bạn chưa được xác nhận." });
+
+                HttpContext.Session.SetInt32("UserId", user.UserId);
+                HttpContext.Session.SetString("FullName", user.FullName);
+                HttpContext.Session.SetString("Email", user.Email);
+                HttpContext.Session.SetString("Role", user.Role);
+                HttpContext.Session.SetString("PhoneNumber", user.PhoneNumber);
+            HttpContext.Session.SetString("OriginRole", user.OriginRole);
+
+            return Ok(new { message = "Login successful." });
+            }
+        [HttpPost("resend-otp")]
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == model.Email);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash))
-                return Unauthorized(new { message = "Invalid email or password." });
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            if (user == null)
+                return BadRequest(new { message = "Email không tồn tại." });
 
-            if (user.Status != "Active")
-                return Unauthorized(new { message = "Tài khoản của bạn chưa được xác nhận." });
+            // Kiểm tra trạng thái tài khoản
+            if (user.Status == "Active")
+                return BadRequest(new { message = "Tài khoản đã được kích hoạt." });
 
-            HttpContext.Session.SetInt32("UserId", user.UserId);
-            HttpContext.Session.SetString("FullName", user.FullName);
-            HttpContext.Session.SetString("Email", user.Email);
-            HttpContext.Session.SetString("Role", user.Role);
-            HttpContext.Session.SetString("PhoneNumber", user.PhoneNumber);
+            // Kiểm tra số lần gửi email còn lại
+            int remainingAttempts = await _emailService.GetRemainingEmailAttemptsAsync(request.Email);
+            if (remainingAttempts <= 0)
+            {
+                return BadRequest(new { message = "Bạn đã gửi quá nhiều email đến địa chỉ này. Vui lòng thử lại sau 24 giờ." });
+            }
 
-            return Ok(new { message = "Login successful." });
+            // Xóa token cũ nếu có
+            var oldTokens = await _context.PasswordResetTokens.Where(t => t.UserId == user.UserId).ToListAsync();
+            if (oldTokens.Any())
+            {
+                _context.PasswordResetTokens.RemoveRange(oldTokens);
+            }
+
+            // Tạo mã OTP 6 số mới
+            string otp = new Random().Next(100000, 999999).ToString();
+
+            // Lưu vào bảng PasswordResetToken
+            var resetToken = new PasswordResetToken
+            {
+                UserId = user.UserId,
+                Token = otp,
+                Expiration = DateTime.UtcNow.AddSeconds(60) // OTP hết hạn sau 60 giây
+            };
+
+            _context.PasswordResetTokens.Add(resetToken);
+            await _context.SaveChangesAsync();
+
+            // Gửi email chứa OTP
+            string emailBody = $"<h3>Mã OTP để xác nhận tài khoản của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 60 giây.</p>";
+            bool isSent = await _emailService.SendEmailAsync(request.Email, "Account Verification OTP", emailBody);
+
+            if (!isSent)
+            {
+                return StatusCode(500, new { message = "Gửi email thất bại. Vui lòng thử lại sau." });
+            }
+
+            return Ok(new
+            {
+                message = "OTP mới đã được gửi đến email. Mã OTP có hiệu lực trong 60 giây.",
+                remainingAttempts = remainingAttempts - 1
+            });
         }
 
         // API Kiểm tra trạng thái đăng nhập
@@ -255,6 +338,7 @@ namespace KhoaLuan1.Controllers
             var email = HttpContext.Session.GetString("Email");
             var role = HttpContext.Session.GetString("Role");
             var phoneNumber = HttpContext.Session.GetString("PhoneNumber");
+            var originRole = HttpContext.Session.GetString("OriginRole");
 
             return Ok(new
             {
@@ -262,7 +346,8 @@ namespace KhoaLuan1.Controllers
                 fullName,
                 email,
                 role,
-                phoneNumber
+                phoneNumber,
+                originRole
             });
         }
 
@@ -281,49 +366,68 @@ namespace KhoaLuan1.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var user = _context.Users.FirstOrDefault(u => u.Email == request.Email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null)
                 return BadRequest(new { message = "Email không tồn tại." });
+
+            // Kiểm tra số lần gửi email còn lại
+            int remainingAttempts = await _emailService.GetRemainingEmailAttemptsAsync(request.Email);
+            if (remainingAttempts <= 0)
+            {
+                return BadRequest(new { message = "Bạn đã gửi quá nhiều email đến địa chỉ này. Vui lòng thử lại sau 24 giờ." });
+            }
+
+            // Xóa token cũ nếu có
+            var oldTokens = await _context.PasswordResetTokens.Where(t => t.UserId == user.UserId).ToListAsync();
+            if (oldTokens.Any())
+            {
+                _context.PasswordResetTokens.RemoveRange(oldTokens);
+            }
 
             // Tạo mã OTP 6 số
             string otp = new Random().Next(100000, 999999).ToString();
 
-            // Lưu vào bảng PasswordResetToken
+            // Lưu vào bảng PasswordResetToken - đổi thành 60 giây
             var resetToken = new PasswordResetToken
             {
                 UserId = user.UserId,
                 Token = otp,
-                Expiration = DateTime.UtcNow.AddMinutes(10) // OTP hết hạn sau 10 phút
+                Expiration = DateTime.UtcNow.AddSeconds(60) // OTP hết hạn sau 60 giây
             };
 
             _context.PasswordResetTokens.Add(resetToken);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // Gửi email chứa OTP
-            string emailBody = $"<h3>Mã OTP đặt lại mật khẩu của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 10 phút.</p>";
-
+            string emailBody = $"<h3>Mã OTP đặt lại mật khẩu của bạn:</h3><h2>{otp}</h2><p>Mã này sẽ hết hạn sau 60 giây.</p>";
             bool isSent = await _emailService.SendEmailAsync(request.Email, "Reset Password OTP", emailBody);
 
             if (!isSent)
+            {
                 return StatusCode(500, new { message = "Gửi email thất bại." });
+            }
 
-            return Ok(new { message = "Vui lòng kiểm tra email để lấy OTP." });
+            return Ok(new
+            {
+                message = "Vui lòng kiểm tra email để lấy OTP. Mã OTP có hiệu lực trong 60 giây.",
+                remainingAttempts = remainingAttempts - 1
+            });
         }
 
-        //API XÁc nhận OTP và mật khẩu mới
+        //API Xác nhận OTP và mật khẩu mới
         [HttpPost("reset-password")]
-        public IActionResult ResetPassword([FromBody] ResetPasswordRequest request)
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var resetToken = _context.PasswordResetTokens
-                .FirstOrDefault(t => t.Token == request.Token && t.Expiration > DateTime.UtcNow);
+            var resetToken = await _context.PasswordResetTokens
+                .FirstOrDefaultAsync(t => t.Token == request.Token && t.Expiration > DateTime.UtcNow);
 
             if (resetToken == null)
                 return BadRequest(new { message = "OTP không hợp lệ hoặc đã hết hạn." });
 
-            var user = _context.Users.FirstOrDefault(u => u.UserId == resetToken.UserId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == resetToken.UserId);
             if (user == null)
                 return BadRequest(new { message = "Người dùng không tồn tại." });
 
@@ -333,7 +437,11 @@ namespace KhoaLuan1.Controllers
 
             // Xóa token sau khi dùng
             _context.PasswordResetTokens.Remove(resetToken);
-            _context.SaveChanges();
+
+            // Reset số lần gửi email khi reset mật khẩu thành công
+            await _emailService.ResetEmailSendCountAsync(user.Email);
+
+            await _context.SaveChangesAsync();
 
             return Ok(new { message = "Mật khẩu đã được cập nhật thành công." });
         }
@@ -359,14 +467,10 @@ namespace KhoaLuan1.Controllers
         [Phone]
         public string PhoneNumber { get; set; }
 
-        // File upload cho CCCD mặt trước
-        public IFormFile FrontIdCardImageFile { get; set; }
-
-        // File upload cho CCCD mặt sau
-        public IFormFile BackIdCardImageFile { get; set; }
-
-        // Biển số xe
-        public string VehicleNumber { get; set; }
+        // Make these fields optional by not having Required attribute
+        public IFormFile? FrontIdCardImageFile { get; set; }
+        public IFormFile? BackIdCardImageFile { get; set; }
+        public string? VehicleNumber { get; set; }
     }
     public class RegisterRequest
     {
@@ -431,5 +535,11 @@ namespace KhoaLuan1.Controllers
     {
         [Required]
         public string Otp { get; set; }
+    }
+    public class ResendOtpRequest
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; }
     }
 }

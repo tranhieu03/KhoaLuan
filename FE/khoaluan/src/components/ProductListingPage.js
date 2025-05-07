@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, ArrowUpDown, Star, Filter, X } from "lucide-react";
+import { Search, ArrowUp, ArrowDown, Star, Filter, MapPin, X } from "lucide-react";
 import axios from "axios";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -16,6 +16,7 @@ const ProductListingPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
   
   // Pagination state
   const [pagination, setPagination] = useState({
@@ -36,6 +37,23 @@ const ProductListingPage = () => {
   });
   
   const [foodCategories, setFoodCategories] = useState([]);
+
+  // Get user's current location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error("Error getting geolocation:", error);
+        }
+      );
+    }
+  }, []);
 
   // Fetch food categories
   useEffect(() => {
@@ -68,6 +86,12 @@ const ProductListingPage = () => {
           sortAscending: filters.sortAscending
         };
 
+        // Add location parameters if available
+        if (userLocation && filters.sortBy === "distance") {
+          params.latitude = userLocation.latitude;
+          params.longitude = userLocation.longitude;
+        }
+
         const response = await axios.get("https://localhost:44308/api/Customer/all-products", {
           params,
           withCredentials: true
@@ -93,7 +117,7 @@ const ProductListingPage = () => {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [pagination.page, filters]);
+  }, [pagination.page, filters, userLocation]);
 
   // Handler functions
   const handlePageChange = (newPage) => {
@@ -108,11 +132,27 @@ const ProductListingPage = () => {
   };
 
   const handleSortChange = (newSortBy) => {
-    setFilters(prev => ({
-      ...prev,
-      sortBy: newSortBy,
-      sortAscending: prev.sortBy === newSortBy ? !prev.sortAscending : true
-    }));
+    // If clicking the same sort option, just toggle direction
+    if (filters.sortBy === newSortBy) {
+      setFilters(prev => ({
+        ...prev,
+        sortAscending: !prev.sortAscending
+      }));
+    } else {
+      // If changing sort criteria, set default direction based on type
+      let defaultAscending = true;
+      
+      // For price, rating, and distance, descending is often the more useful default
+      if (["price", "rating", "distance"].includes(newSortBy)) {
+        defaultAscending = false;
+      }
+      
+      setFilters(prev => ({
+        ...prev,
+        sortBy: newSortBy,
+        sortAscending: defaultAscending
+      }));
+    }
   };
 
   const resetFilters = () => {
@@ -137,11 +177,23 @@ const ProductListingPage = () => {
     filters.maxPrice
   ].filter(Boolean).length;
 
+  // Helper to get sort option display name
+  const getSortOptionName = (sortKey) => {
+    switch (sortKey) {
+      case 'name': return 'Tên';
+      case 'price': return 'Giá';
+      case 'rating': return 'Đánh giá';
+      case 'newest': return 'Mới nhất';
+      case 'distance': return 'Khoảng cách';
+      default: return sortKey;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Header */}
-        <Header /> {/* Thêm Header vào đầu trang */}
+        <Header />
       
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold text-gray-900">Khám phá món ngon</h1>
@@ -197,17 +249,17 @@ const ProductListingPage = () => {
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục</label>
                 <select
-  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-  value={filters.foodCategoryId}
-  onChange={(e) => handleFilterChange('foodCategoryId', e.target.value)}
->
-  <option value="">Tất cả danh mục</option>
-  {foodCategories.map(category => (
-    <option key={category.foodCategoryId} value={category.foodCategoryId}>
-      {category.name}
-    </option>
-  ))}
-</select>
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={filters.foodCategoryId}
+                  onChange={(e) => handleFilterChange('foodCategoryId', e.target.value)}
+                >
+                  <option value="">Tất cả danh mục</option>
+                  {foodCategories.map(category => (
+                    <option key={category.foodCategoryId} value={category.foodCategoryId}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               
               {/* Price Range */}
@@ -335,7 +387,7 @@ const ProductListingPage = () => {
             <div className="bg-white rounded-xl shadow-md p-4 mb-6">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-gray-500 mr-2">Sắp xếp:</span>
-                {['name', 'price', 'rating', 'newest'].map((sortKey) => (
+                {['name', 'price', 'rating', 'newest', 'distance'].map((sortKey) => (
                   <button
                     key={sortKey}
                     onClick={() => handleSortChange(sortKey)}
@@ -344,18 +396,56 @@ const ProductListingPage = () => {
                         ? 'bg-blue-100 text-blue-800'
                         : 'bg-gray-100 hover:bg-gray-200'
                     }`}
+                    disabled={sortKey === 'distance' && !userLocation}
                   >
-                    {sortKey === 'name' && 'Tên'}
-                    {sortKey === 'price' && 'Giá'}
-                    {sortKey === 'rating' && 'Đánh giá'}
-                    {sortKey === 'newest' && 'Mới nhất'}
+                    {getSortOptionName(sortKey)}
                     {filters.sortBy === sortKey && (
-                      <ArrowUpDown className={`h-3 w-3 ${filters.sortAscending ? '' : 'transform rotate-180'}`} />
+                      filters.sortAscending ? 
+                      <ArrowUp className="h-3 w-3" /> : 
+                      <ArrowDown className="h-3 w-3" />
                     )}
+                    {sortKey === 'distance' && <MapPin className="h-3 w-3 ml-1" />}
                   </button>
                 ))}
               </div>
+              
+              {/* Sort direction labels */}
+              {filters.sortBy && (
+                <div className="mt-2 text-xs text-gray-500">
+                  {filters.sortBy === 'name' && (
+                    <span>{filters.sortAscending ? "A → Z" : "Z → A"}</span>
+                  )}
+                  {filters.sortBy === 'price' && (
+                    <span>{filters.sortAscending ? "Giá thấp → cao" : "Giá cao → thấp"}</span>
+                  )}
+                  {filters.sortBy === 'rating' && (
+                    <span>{filters.sortAscending ? "Đánh giá thấp → cao" : "Đánh giá cao → thấp"}</span>
+                  )}
+                  {filters.sortBy === 'newest' && (
+                    <span>{filters.sortAscending ? "Cũ nhất → mới nhất" : "Mới nhất → cũ nhất"}</span>
+                  )}
+                  {filters.sortBy === 'distance' && (
+                    <span>{filters.sortAscending ? "Xa nhất → gần nhất" : "Gần nhất → xa nhất"}</span>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* Location Permission */}
+            {filters.sortBy === 'distance' && !userLocation && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-md">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <MapPin className="h-5 w-5 text-yellow-400" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      Để sắp xếp theo vị trí, vui lòng cấp quyền truy cập vị trí của bạn.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && <ErrorMessage message={error} />}

@@ -4,6 +4,7 @@ import { Star, ArrowLeft } from "lucide-react";
 import axios from "axios";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
+import Header from "./Header";
 
 const ProductDetailPage = () => {
   const { productId } = useParams();
@@ -50,6 +51,11 @@ const ProductDetailPage = () => {
   if (!product) return <div className="container mx-auto px-4 py-8">Sản phẩm không tồn tại</div>;
 
   return (
+    <div className="bg-white">
+  {/* Header tràn full width */}
+  <div className="w-full">
+    <Header />
+  </div>
     <div className="container mx-auto px-4 py-8">
       <button 
         onClick={() => navigate(-1)}
@@ -169,6 +175,7 @@ const ProductDetailPage = () => {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 };

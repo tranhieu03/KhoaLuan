@@ -35,7 +35,19 @@ function Cart() {
       toast.error("Lỗi khi tải giỏ hàng");
     }
   };
-
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return "/placeholder-food.jpg";
+    
+    // Check if the image URL is a full web URL
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      return imageUrl;
+    }
+    
+    // For local uploads, prepend the base URL and ensure correct path
+    // Remove any leading slashes to avoid double slashes in URL
+    const cleanedPath = imageUrl.replace(/^\/+/, '');
+    return `https://localhost:44308/${cleanedPath}`;
+  };
   const toggleSelectItem = (cartItemId) => {
     setSelectedItems(prev =>
       prev.includes(cartItemId)
@@ -164,11 +176,14 @@ function Cart() {
                   </button>
                   
                   <div className="flex-shrink-0 mb-4 md:mb-0 md:mr-4">
-                    <img 
-                      src={item.imageUrl || "/placeholder-food.jpg"} 
-                      alt={item.name} 
-                      className="w-24 h-24 object-cover rounded"
-                    />
+                  <img 
+  src={getImageUrl(item.imageUrl)} 
+  alt={item.name} 
+  className="w-24 h-24 object-cover rounded"
+  onError={(e) => {
+    e.target.src = "/placeholder-food.jpg";
+  }}
+/>
                   </div>
                 </div>
                 

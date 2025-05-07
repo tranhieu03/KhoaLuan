@@ -2,7 +2,10 @@
 {
     public interface IEmailService
     {
-        Task SendEmailAsync(string to, string subject, string body);
+        Task<bool> SendEmailAsync(string toEmail, string subject, string message);
+        Task<bool> CanSendEmail(string toEmail);
+        Task<int> GetRemainingEmailAttemptsAsync(string email);
+        Task ResetEmailSendCountAsync(string email);
     }
 
 }

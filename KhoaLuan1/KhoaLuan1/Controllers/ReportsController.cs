@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace KhoaLuan1.Controllers
 {
-    [Route("api/reports")]
+    [Route("api/[controller]")]
     [ApiController]
     public class ReportsController : ControllerBase
     {
@@ -34,8 +34,13 @@ namespace KhoaLuan1.Controllers
         public async Task<IActionResult> GetSellerRevenue([FromQuery] string filterType, [FromQuery] DateTime date)
         {
             var userId = HttpContext.Session.GetInt32("UserId");
+            var role = HttpContext.Session.GetString("Role");
             if (!userId.HasValue) return Unauthorized("User not logged in.");
-
+            if(role != "seller")
+            {
+                return Unauthorized(new { message = "Bạn không có quyền truy cập." });
+            }
+        
             if (!IsValidFilterType(filterType))
                 return BadRequest("Invalid filter type. Use 'day', 'month', or 'year'.");
 
@@ -71,6 +76,7 @@ namespace KhoaLuan1.Controllers
 
             var query = _context.OrderDetails
                 .Include(od => od.Order)
+                .Include(od => od.Product) // Thêm include Product để lấy thông tin sản phẩm
                 .Where(od => od.Order.RestaurantId == restaurant.RestaurantId && od.Order.Status == "Completed");
 
             query = filterType.ToLower() switch
@@ -81,15 +87,21 @@ namespace KhoaLuan1.Controllers
                 _ => query
             };
 
-            var productRevenue = await query.GroupBy(od => od.ProductId)
+            var productRevenue = await query.GroupBy(od => new { od.ProductId, od.Product.Name }) // Nhóm theo ProductId và Product Name
                 .Select(g => new
                 {
-                    ProductId = g.Key,
+                    ProductId = g.Key.ProductId,
+                    ProductName = g.Key.Name, // Thêm tên sản phẩm
+                    TotalQuantitySold = g.Sum(od => od.Quantity), // Thêm tổng số lượng bán ra
                     TotalRevenue = g.Sum(od => od.Price * od.Quantity)
-                }).ToListAsync();
+                })
+                .OrderByDescending(x => x.TotalRevenue) // Sắp xếp theo doanh thu giảm dần
+                .ToListAsync();
 
             return Ok(productRevenue);
         }
+
+      
 
         // Thống kê số lượng đơn hàng đã giao của người giao hàng theo ngày/tháng/năm
         [HttpGet("delivery/orders")]

@@ -17,6 +17,10 @@ public partial class KhoaluantestContext : DbContext
 
     public virtual DbSet<CartItem> CartItems { get; set; }
 
+    public virtual DbSet<DeliveryTracking> DeliveryTrackings { get; set; }
+
+    public virtual DbSet<EmailSendRecord> EmailSendRecords { get; set; }
+
     public virtual DbSet<FoodCategory> FoodCategories { get; set; }
 
     public virtual DbSet<Message> Messages { get; set; }
@@ -43,6 +47,8 @@ public partial class KhoaluantestContext : DbContext
 
     public virtual DbSet<VoucherCategory> VoucherCategories { get; set; }
 
+    public virtual DbSet<VoucherCondition> VoucherConditions { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Name=DefaultConnection");
 
@@ -68,6 +74,40 @@ public partial class KhoaluantestContext : DbContext
                 .HasConstraintName("FK__CartItems__UserI__31B762FC");
         });
 
+        modelBuilder.Entity<DeliveryTracking>(entity =>
+        {
+            entity.HasKey(e => e.TrackingId).HasName("PK__DeliveryTracking__ID");
+
+            entity.ToTable("DeliveryTracking");
+
+            entity.Property(e => e.Latitude).HasColumnType("decimal(10, 6)");
+            entity.Property(e => e.Longitude).HasColumnType("decimal(10, 6)");
+            entity.Property(e => e.TrackingTime).HasColumnType("datetime");
+            entity.Property(e => e.TrackingType)
+                .HasMaxLength(50)
+                .HasDefaultValue("Start");
+
+            entity.HasOne(d => d.DeliveryPerson).WithMany(p => p.DeliveryTrackings)
+                .HasForeignKey(d => d.DeliveryPersonId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DeliveryTracking_User");
+
+            entity.HasOne(d => d.Order).WithMany(p => p.DeliveryTrackings)
+                .HasForeignKey(d => d.OrderId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_DeliveryTracking_Order");
+        });
+
+        modelBuilder.Entity<EmailSendRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__EmailSen__3214EC0755C0F5E7");
+
+            entity.ToTable("EmailSendRecord");
+
+            entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.LastSentTime).HasColumnType("datetime");
+        });
+
         modelBuilder.Entity<FoodCategory>(entity =>
         {
             entity.HasKey(e => e.FoodCategoryId).HasName("PK__FoodCate__5451B7EBD7BD6067");
@@ -84,6 +124,18 @@ public partial class KhoaluantestContext : DbContext
         {
             entity.HasKey(e => e.MessageId).HasName("PK__Messages__C87C0C9CCB06022F");
 
+            entity.ToTable(tb => tb.HasTrigger("trg_Messages_AfterInsert"));
+
+            entity.HasIndex(e => e.IsRead, "IX_Messages_IsRead");
+
+            entity.HasIndex(e => e.OrderId, "IX_Messages_OrderId");
+
+            entity.HasIndex(e => e.ReceiverId, "IX_Messages_ReceiverId").HasFilter("([ReceiverId] IS NOT NULL)");
+
+            entity.HasIndex(e => e.SenderId, "IX_Messages_SenderId");
+
+            entity.HasIndex(e => e.SentAt, "IX_Messages_SentAt");
+
             entity.Property(e => e.SentAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
@@ -95,7 +147,6 @@ public partial class KhoaluantestContext : DbContext
 
             entity.HasOne(d => d.Receiver).WithMany(p => p.MessageReceivers)
                 .HasForeignKey(d => d.ReceiverId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Messages__Receiv__4C6B5938");
 
             entity.HasOne(d => d.Sender).WithMany(p => p.MessageSenders)
@@ -251,6 +302,7 @@ public partial class KhoaluantestContext : DbContext
             entity.Property(e => e.PhoneNumber)
                 .HasMaxLength(15)
                 .IsUnicode(false);
+            entity.Property(e => e.RestaurantImage).HasMaxLength(255);
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -297,6 +349,9 @@ public partial class KhoaluantestContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
             entity.Property(e => e.FullName).HasMaxLength(100);
+            entity.Property(e => e.OriginRole)
+                .HasMaxLength(50)
+                .HasDefaultValue("Customer");
             entity.Property(e => e.PasswordHash).HasMaxLength(255);
             entity.Property(e => e.PhoneNumber)
                 .HasMaxLength(10)
@@ -314,8 +369,13 @@ public partial class KhoaluantestContext : DbContext
 
             entity.ToTable("Voucher");
 
+            entity.HasIndex(e => e.ApplyMode, "IX_Vouchers_ApplyMode");
+
             entity.HasIndex(e => e.Code, "UQ__Voucher__A25C5AA703693E01").IsUnique();
 
+            entity.Property(e => e.ApplyMode)
+                .HasMaxLength(20)
+                .HasDefaultValue("Individual");
             entity.Property(e => e.Code).HasMaxLength(50);
             entity.Property(e => e.DiscountAmount).HasColumnType("decimal(10, 2)");
             entity.Property(e => e.ExpirationDate).HasColumnType("datetime");
@@ -355,6 +415,25 @@ public partial class KhoaluantestContext : DbContext
 
             entity.Property(e => e.Description).HasMaxLength(255);
             entity.Property(e => e.Name).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<VoucherCondition>(entity =>
+        {
+            entity.HasKey(e => e.VoucherConditionId).HasName("PK__VoucherC__D55F79033E3EE1EC");
+
+            entity.HasIndex(e => e.ConditionType, "IX_VoucherConditions_ConditionType");
+
+            entity.HasIndex(e => e.VoucherId, "IX_VoucherConditions_VoucherId");
+
+            entity.Property(e => e.ConditionType).HasMaxLength(20);
+            entity.Property(e => e.CreatedDate).HasDefaultValueSql("(getutcdate())");
+            entity.Property(e => e.Field).HasMaxLength(50);
+            entity.Property(e => e.Operator).HasMaxLength(20);
+            entity.Property(e => e.UpdatedDate).HasDefaultValueSql("(getutcdate())");
+
+            entity.HasOne(d => d.Voucher).WithMany(p => p.VoucherConditions)
+                .HasForeignKey(d => d.VoucherId)
+                .HasConstraintName("FK_VoucherConditions_Vouchers");
         });
 
         OnModelCreatingPartial(modelBuilder);

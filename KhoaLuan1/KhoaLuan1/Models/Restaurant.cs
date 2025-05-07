@@ -27,6 +27,8 @@ public partial class Restaurant
 
     public string Status { get; set; } = null!;
 
+    public string? RestaurantImage { get; set; }
+
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 
     public virtual ICollection<Product> Products { get; set; } = new List<Product>();

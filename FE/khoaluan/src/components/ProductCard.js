@@ -122,18 +122,27 @@ const ProductCard = ({ product, onViewDetail, onCartUpdate }) => {
         <p className="text-gray-600 text-sm mb-2 line-clamp-2">{product.description}</p>
         
         {product.restaurant && (
-          <p 
-            className="text-gray-500 text-xs mb-3 truncate cursor-pointer hover:text-blue-600"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleViewRestaurant(product.restaurant.restaurantId);
-            }}
-          >
-            {product.restaurant.name}
-          </p>
-        )}
+  <div className="flex items-center justify-between mb-3">
+    <p 
+      className="text-gray-500 text-xs truncate cursor-pointer hover:text-blue-600 mr-2"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleViewRestaurant(product.restaurant.restaurantId);
+      }}
+    >
+      {product.restaurant.name}
+    </p>
+    {product.distance && (
+      <span className="text-xs text-gray-400 flex items-center whitespace-nowrap">
+       
+        {parseFloat(product.distance).toFixed(1)} km
+      </span>
+    )}
+  </div>
+)}
         
         <div className="mt-auto flex justify-between items-center">
+          
           <p className="font-bold text-lg text-blue-600">{formatPrice(product.price)}</p>
           
           <div className="flex gap-2">
