@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 const API_ORDERS2 = "https://localhost:44308";
 const SellerDashboard = () => {
   const [products, setProducts] = useState([]);
-  const [deletedProducts, setDeletedProducts] = useState([]);
+  const [InactiveProducts, setInactiveProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("active");
@@ -70,10 +70,10 @@ const SellerDashboard = () => {
     setIsLoading(true);
     try {
       const activeRes = await axios.get(`${API_ORDERS2}/api/Product/listsanphamcuahang`, { withCredentials: true });
-      const deletedRes = await axios.get(`${API_ORDERS2}/api/Product/listsanphamdaxoa`, { withCredentials: true });
+      const InactiveRes = await axios.get(`${API_ORDERS2}/api/Product/listsanphamdaxoa`, { withCredentials: true });
       
       setProducts(activeRes.data);
-      setDeletedProducts(deletedRes.data);
+      setInactiveProducts(InactiveRes.data);
     } catch (error) {
       toast.error(error.response?.data?.message || "Lỗi khi tải sản phẩm");
       if (error.response?.status === 401) {
@@ -193,7 +193,7 @@ const SellerDashboard = () => {
     setPreviewImage(null);
   };
 
-  const displayedProducts = activeTab === "active" ? products : deletedProducts;
+  const displayedProducts = activeTab === "active" ? products : InactiveProducts;
 
   // Hiển thị loading nếu đang kiểm tra trạng thái nhà hàng
   if (isCheckingRestaurant) {
@@ -241,10 +241,10 @@ const SellerDashboard = () => {
             Sản phẩm đang bán ({products.length})
           </button>
           <button
-            className={`px-4 py-2 font-medium ${activeTab === "deleted" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-gray-500"}`}
-            onClick={() => setActiveTab("deleted")}
+            className={`px-4 py-2 font-medium ${activeTab === "Inactive" ? "text-indigo-600 border-b-2 border-indigo-600" : "text-gray-500"}`}
+            onClick={() => setActiveTab("Inactive")}
           >
-            Sản phẩm đã xóa ({deletedProducts.length})
+            Sản phẩm đã xóa ({InactiveProducts.length})
           </button>
         </div>
 
@@ -424,8 +424,8 @@ const SellerDashboard = () => {
                     </div>
                   )}
                   
-                  {/* Deleted Badge */}
-                  {activeTab === "deleted" && (
+                  {/* Inactive Badge */}
+                  {activeTab === "Inactive" && (
                     <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center">
                       <span className="bg-red-500 text-white px-3 py-1 rounded-md text-sm font-medium">
                         Đã xóa

@@ -223,13 +223,12 @@ namespace KhoaLuan1.Controllers
                 return BadRequest(new { message = "Invalid restaurant ID." });
 
             var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+           
 
             if (userId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Customer")
-                return BadRequest(new { message = "Only customers are allowed to view products by restaurant." });
+           
 
             var restaurant = await _context.Restaurants.FirstOrDefaultAsync(r => r.RestaurantId == restaurantId);
             if (restaurant == null)
@@ -257,13 +256,12 @@ namespace KhoaLuan1.Controllers
         public async Task<IActionResult> GetProductDetail(int productId)
         {
             var userId = HttpContext.Session.GetInt32("UserId");
-            var role = HttpContext.Session.GetString("Role");
+           
 
             if (userId == null)
                 return Unauthorized(new { message = "User is not logged in." });
 
-            if (role != "Customer")
-                return BadRequest(new { message = "Only customers are allowed to view product details." });
+           
 
             var product = await _context.Products
                 .Include(p => p.Restaurant)

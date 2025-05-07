@@ -302,6 +302,7 @@ public partial class KhoaluantestContext : DbContext
             entity.Property(e => e.PhoneNumber)
                 .HasMaxLength(15)
                 .IsUnicode(false);
+            entity.Property(e => e.RestaurantImage).HasMaxLength(255);
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsUnicode(false)
@@ -348,6 +349,9 @@ public partial class KhoaluantestContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.FrontIdCardImage).HasMaxLength(255);
             entity.Property(e => e.FullName).HasMaxLength(100);
+            entity.Property(e => e.OriginRole)
+                .HasMaxLength(50)
+                .HasDefaultValue("Customer");
             entity.Property(e => e.PasswordHash).HasMaxLength(255);
             entity.Property(e => e.PhoneNumber)
                 .HasMaxLength(10)

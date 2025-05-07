@@ -24,6 +24,8 @@ import RestaurantManagement from "./components/AdminRestaurants";
 import RevenueReportComponent from "./components/RestaurantRevenueReport";
 import VoucherManagement from "./components/AdminVoucher";
 import DeliveryPersonProfile from "./components/DeliveryPersonProfile";
+import DeliveryRevenue from "./components/DeliveryRevenue";
+import RestaurantInfo from "./components/RestaurantInfo";
 
 function App() {
   return (
@@ -53,6 +55,8 @@ function App() {
         <Route path="/seller/renue" element={<RevenueReportComponent/>} />
         <Route path="/admin/voucher" element={<VoucherManagement />} />
         <Route path="/delivery/profile" element={<DeliveryPersonProfile />} />
+        <Route path="/delivery/renue" element={<DeliveryRevenue/>}/>
+        <Route path="/restaurant/info" element={<RestaurantInfo />} />
       </Routes>
     </Router>
   );

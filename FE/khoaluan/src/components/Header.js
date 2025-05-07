@@ -64,17 +64,17 @@ const Header = () => {
   }, []);
 
   // Sửa hàm fetchNotifications để thêm withCredentials
-const fetchNotifications = async () => {
-  try {
-    const response = await axios.get("https://localhost:44308/api/Notification/get-notifications", {
-      withCredentials: true  // Thêm dòng này
-    });
-    setNotifications(response.data);
-    setUnreadCount(response.data.filter(notification => !notification.isRead).length);
-  } catch (error) {
-    console.error("Lỗi khi tải thông báo:", error);
-  }
-};
+  const fetchNotifications = async () => {
+    try {
+      const response = await axios.get("https://localhost:44308/api/Notification/get-notifications", {
+        withCredentials: true
+      });
+      setNotifications(response.data);
+      setUnreadCount(response.data.filter(notification => !notification.isRead).length);
+    } catch (error) {
+      console.error("Lỗi khi tải thông báo:", error);
+    }
+  };
 
   const markAllAsRead = async () => {
     try {
@@ -125,6 +125,34 @@ const fetchNotifications = async () => {
       hour: '2-digit',
       minute: '2-digit'
     }).format(date);
+  };
+
+  // Lấy link trang quản lý dựa trên role
+  const getDashboardLink = () => {
+    if (!userInfo || !userInfo.role) return "/profile";
+    
+    switch (userInfo.role) {
+      case "Seller":
+        return "/restaurant/dashboard";
+      case "DeliveryPerson":
+        return "/delivery/dashboard";
+      default:
+        return "/profile";
+    }
+  };
+
+  // Lấy tên hiển thị cho trang quản lý dựa trên role
+  const getDashboardName = () => {
+    if (!userInfo || !userInfo.role) return "Thông tin cá nhân";
+    
+    switch (userInfo.role) {
+      case "seller":
+        return "Quản lý bán hàng";
+      case "DeliveryPerson":
+        return "Quản lý giao hàng";
+      default:
+        return "Thông tin cá nhân";
+    }
   };
 
   return (
@@ -199,17 +227,40 @@ const fetchNotifications = async () => {
                   )}
                 </div>
 
-                {/* Giỏ hàng */}
-                <Link 
-                  to="/cart" 
-                  className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
-                >
-                  <ShoppingCart className="h-5 w-5 text-white" />
-                  <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    3
-                  </span>
-                </Link>
-
+                {/* Giỏ hàng - chỉ hiển thị cho khách hàng thông thường */}
+                {(!userInfo?.role || userInfo.role === "Customer") && (
+                  <Link 
+                    to="/cart" 
+                    className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
+                  >
+                    <ShoppingCart className="h-5 w-5 text-white" />
+                    <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      3
+                    </span>
+                  </Link>
+                )}
+ {(!userInfo?.role || userInfo.role === "seller") && (
+                  <Link 
+                    to="/cart" 
+                    className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
+                  >
+                    <ShoppingCart className="h-5 w-5 text-white" />
+                    <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      3
+                    </span>
+                  </Link>
+                )}
+                 {(!userInfo?.role || userInfo.role === "DeliveryPerson") && (
+                  <Link 
+                    to="/cart" 
+                    className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
+                  >
+                    <ShoppingCart className="h-5 w-5 text-white" />
+                    <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      3
+                    </span>
+                  </Link>
+                )}
                 {/* Dark mode toggle */}
                 <button
                   onClick={toggleDarkMode}
@@ -242,21 +293,34 @@ const fetchNotifications = async () => {
                     }`} />
                   </button>
                   
-                  {/* Dropdown menu */}
+                  {/* Dropdown menu với các tùy chọn dựa trên role */}
                   {isUserDropdownOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
                       <Link 
-                        to="/profile" 
+                        to={getDashboardLink()}
                         className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
                       >
-                        👤 Thông tin cá nhân
+                        {userInfo?.role === "seller" ? "🏪" : userInfo?.role === "DeliveryPerson" ? "🚚" : "👤"} {getDashboardName()}
                       </Link>
-                      <Link 
-                        to="/customer/order" 
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
-                      >
-                        🛒 Đơn hàng của tôi
-                      </Link>
+                      
+                      {/* Hiển thị link đơn hàng chỉ cho khách hàng thông thường */}
+                      {(!userInfo?.role || userInfo.role === "Customer") && (
+                        <Link 
+                          to="/customer/order" 
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                        >
+                          🛒 Đơn hàng của tôi
+                        </Link>
+                      )}
+                      {(!userInfo?.role || userInfo.role === "seller") && (
+                        <Link 
+                          to="/restaurant/dashboard" 
+                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                        >
+                          quản lý bán hàng
+                        </Link>
+                      )}
+                      
                       <button
                         onClick={handleLogout}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"

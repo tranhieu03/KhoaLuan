@@ -249,6 +249,7 @@ namespace KhoaLuan1.Controllers
             return Ok(new { message = "Restaurant rejected and email sent." });
         }
 
+
         // QUản lý voucher///////
 
         [HttpGet("vouchers")]

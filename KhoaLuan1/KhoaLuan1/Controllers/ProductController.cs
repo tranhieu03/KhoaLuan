@@ -168,7 +168,7 @@ namespace KhoaLuan1.Controllers
             var restaurant = restaurantResult.Value;
 
             var products = await _context.Products
-                .Where(p => p.RestaurantId == restaurant.RestaurantId && p.Status == "Deleted")
+                .Where(p => p.RestaurantId == restaurant.RestaurantId && p.Status == "Inactive")
                 .Select(p => new ProductViewModel
                 {
                     ProductId = p.ProductId,
@@ -197,13 +197,29 @@ namespace KhoaLuan1.Controllers
             if (product == null)
                 return NotFound(new { message = $"Product with ID {id} not found in your restaurant" });
 
-            if (product.Status == "Deleted")
-                return BadRequest(new { message = "Product is already deleted" });
+            if (product.Status == "Inactive")
+                return BadRequest(new { message = "Product is already inactive" });
+
+            // Kiểm tra xem sản phẩm có đang trong đơn hàng đang xử lý không
+            var existingInOrders = await _context.OrderDetails
+                .Include(od => od.Order)
+                .AnyAsync(od => od.ProductId == id &&
+                         (od.Order.Status == "Pending" || od.Order.Status == "Processing" ||
+                          od.Order.Status == "Shipping"));
+
+            if (existingInOrders)
+            {
+                return BadRequest(new
+                {
+                    message = "Cannot deactivate this product because it's part of ongoing orders"
+                });
+            }
 
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                product.Status = "Deleted";
+                // Sử dụng "Inactive" thay vì "Deleted" vì đây là giá trị được phép
+                product.Status = "Inactive";
 
                 var cartItems = await _context.CartItems
                     .Where(ci => ci.ProductId == id)
@@ -211,20 +227,25 @@ namespace KhoaLuan1.Controllers
 
                 foreach (var item in cartItems)
                 {
-                    item.Status = "Deleted";
+                    // Đảm bảo CartItems cũng sử dụng giá trị hợp lệ tùy thuộc vào ràng buộc của nó
+                    item.Status = "Deleted"; // Giả sử "Deleted" là hợp lệ cho CartItems
                 }
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                _logger.LogInformation("Marked product {ProductId} as deleted", id);
-                return Ok(new { message = $"Product {product.Name} marked as deleted" });
+                _logger.LogInformation("Marked product {ProductId} as inactive", id);
+                return Ok(new { message = $"Product {product.Name} marked as inactive" });
             }
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                _logger.LogError(ex, "Error marking product {ProductId} as deleted", id);
-                return StatusCode(500, new { message = "Error deleting product" });
+                _logger.LogError(ex, "Error marking product {ProductId} as inactive", id);
+                return StatusCode(500, new
+                {
+                    message = "Error updating product status",
+                    details = ex.Message
+                });
             }
         }
 
@@ -249,7 +270,7 @@ namespace KhoaLuan1.Controllers
                 product.Status = "Active";
 
                 var cartItems = await _context.CartItems
-                    .Where(ci => ci.ProductId == id && ci.Status == "Deleted")
+                    .Where(ci => ci.ProductId == id && ci.Status == "Inactive")
                     .ToListAsync();
 
                 foreach (var item in cartItems)

@@ -241,6 +241,13 @@ const RestaurantHeader = () => {
                         Báo cáo doanh thu
                       </Link>
                       <Link 
+                        to="/all" 
+                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
+                      >
+                        <PieChart className="h-4 w-4 mr-2" />
+                        Người bán mua hàng
+                      </Link>
+                      <Link 
                         to="/seller/order" 
                         className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
                       >

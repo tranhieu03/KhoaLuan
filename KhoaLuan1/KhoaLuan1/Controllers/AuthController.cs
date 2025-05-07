@@ -117,7 +117,9 @@ namespace KhoaLuan1.Controllers
                     // Thêm các trường mới
                     FrontIdCardImage = frontIdCardImagePath,
                     BackIdCardImage = backIdCardImagePath,
-                    VehicleNumber = model.VehicleNumber
+                    VehicleNumber = model.VehicleNumber,
+                    OriginRole= "Customer"
+
                 };
 
                 _context.Users.Add(user);
@@ -241,6 +243,31 @@ namespace KhoaLuan1.Controllers
         }
 
 
+        
+
+        // API Đăng nhập
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginRequest model)
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == model.Email);
+                if (user == null || !BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash))
+                    return Unauthorized(new { message = "Invalid email or password." });
+
+                if (user.Status != "Active")
+                    return Unauthorized(new { message = "Tài khoản của bạn chưa được xác nhận." });
+
+                HttpContext.Session.SetInt32("UserId", user.UserId);
+                HttpContext.Session.SetString("FullName", user.FullName);
+                HttpContext.Session.SetString("Email", user.Email);
+                HttpContext.Session.SetString("Role", user.Role);
+                HttpContext.Session.SetString("PhoneNumber", user.PhoneNumber);
+            HttpContext.Session.SetString("OriginRole", user.OriginRole);
+
+            return Ok(new { message = "Login successful." });
+            }
         [HttpPost("resend-otp")]
         public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest request)
         {
@@ -299,29 +326,6 @@ namespace KhoaLuan1.Controllers
             });
         }
 
-        // API Đăng nhập
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest model)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == model.Email);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash))
-                return Unauthorized(new { message = "Invalid email or password." });
-
-            if (user.Status != "Active")
-                return Unauthorized(new { message = "Tài khoản của bạn chưa được xác nhận." });
-
-            HttpContext.Session.SetInt32("UserId", user.UserId);
-            HttpContext.Session.SetString("FullName", user.FullName);
-            HttpContext.Session.SetString("Email", user.Email);
-            HttpContext.Session.SetString("Role", user.Role);
-            HttpContext.Session.SetString("PhoneNumber", user.PhoneNumber);
-
-            return Ok(new { message = "Login successful." });
-        }
-
         // API Kiểm tra trạng thái đăng nhập
         [HttpGet("status")]
         public IActionResult Status()
@@ -334,6 +338,7 @@ namespace KhoaLuan1.Controllers
             var email = HttpContext.Session.GetString("Email");
             var role = HttpContext.Session.GetString("Role");
             var phoneNumber = HttpContext.Session.GetString("PhoneNumber");
+            var originRole = HttpContext.Session.GetString("OriginRole");
 
             return Ok(new
             {
@@ -341,7 +346,8 @@ namespace KhoaLuan1.Controllers
                 fullName,
                 email,
                 role,
-                phoneNumber
+                phoneNumber,
+                originRole
             });
         }
 
