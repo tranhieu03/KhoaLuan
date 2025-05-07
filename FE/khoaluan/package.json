@@ -1,0 +1,52 @@
+{
+  "name": "khoaluan",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@goongmaps/goong-map-react": "^1.1.2",
+    "@microsoft/signalr": "^8.0.7",
+    "@react-google-maps/api": "^2.20.6",
+    "axios": "^1.7.9",
+    "cra-template": "1.2.0",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.13",
+    "express": "^5.1.0",
+    "lucide-react": "^0.486.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-leaflet": "^4.2.1",
+    "react-router-dom": "^6.28.2",
+    "react-scripts": "^5.0.1",
+    "react-toastify": "^11.0.5",
+    "recharts": "^2.15.1",
+    "web-vitals": "^4.2.4"
+  },
+  "scripts": {
+    "start": "cross-env HTTPS=true react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "vite-plugin-mkcert": "^1.17.8"
+  }
+}

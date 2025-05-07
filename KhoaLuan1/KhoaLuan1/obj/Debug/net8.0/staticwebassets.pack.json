@@ -1,0 +1,65 @@
+{
+  "Files": [
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\6260f40b-6ffe-4544-a8cf-7225e681c1b8.png",
+      "PackagePath": "staticwebassets\\uploads\\6260f40b-6ffe-4544-a8cf-7225e681c1b8.png"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\c60bfe67-733f-4b68-bde7-4228e9de3786.png",
+      "PackagePath": "staticwebassets\\uploads\\c60bfe67-733f-4b68-bde7-4228e9de3786.png"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\e7d22581-3de9-4f26-84ba-7f58447b922e.png",
+      "PackagePath": "staticwebassets\\uploads\\e7d22581-3de9-4f26-84ba-7f58447b922e.png"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\idcards\\2bf47289-19a2-47b1-b094-14a85668a3fa_R (2).jpg",
+      "PackagePath": "staticwebassets\\uploads\\idcards\\2bf47289-19a2-47b1-b094-14a85668a3fa_R (2).jpg"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\idcards\\7825407e-d0b6-4da4-8120-ee76dc3ae803_OIP (1).jpg",
+      "PackagePath": "staticwebassets\\uploads\\idcards\\7825407e-d0b6-4da4-8120-ee76dc3ae803_OIP (1).jpg"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\idcards\\c4a2b6dd-889c-4bd2-8951-913240bd7bf8_R.jpg",
+      "PackagePath": "staticwebassets\\uploads\\idcards\\c4a2b6dd-889c-4bd2-8951-913240bd7bf8_R.jpg"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\idcards\\d08d2d1d-1986-4c93-8e47-c069a208acf6_IMG_3772[1].JPG",
+      "PackagePath": "staticwebassets\\uploads\\idcards\\d08d2d1d-1986-4c93-8e47-c069a208acf6_IMG_3772[1].JPG"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\products\\312267b2-21f2-4466-b5c7-26c9ea5977e8_R (1).jpg",
+      "PackagePath": "staticwebassets\\uploads\\products\\312267b2-21f2-4466-b5c7-26c9ea5977e8_R (1).jpg"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\products\\43155cb2-9d89-4547-8d14-b2ba5697d9c5_OIP (2).jpg",
+      "PackagePath": "staticwebassets\\uploads\\products\\43155cb2-9d89-4547-8d14-b2ba5697d9c5_OIP (2).jpg"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\products\\9f3280df-1dad-45e6-bac5-a2987e025476_th.jpg",
+      "PackagePath": "staticwebassets\\uploads\\products\\9f3280df-1dad-45e6-bac5-a2987e025476_th.jpg"
+    },
+    {
+      "Id": "C:\\Users\\dell\\Downloads\\KhoaLuan-hieu\\KhoaLuan-hieu\\KhoaLuan1\\KhoaLuan1\\wwwroot\\uploads\\products\\d4728350-16af-45bf-990c-3cab5f6846f3_R (2).jpg",
+      "PackagePath": "staticwebassets\\uploads\\products\\d4728350-16af-45bf-990c-3cab5f6846f3_R (2).jpg"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.KhoaLuan1.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.KhoaLuan1.props",
+      "PackagePath": "build\\KhoaLuan1.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.KhoaLuan1.props",
+      "PackagePath": "buildMultiTargeting\\KhoaLuan1.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.KhoaLuan1.props",
+      "PackagePath": "buildTransitive\\KhoaLuan1.props"
+    }
+  ],
+  "ElementsToRemove": []
+}
