@@ -3,6 +3,7 @@ import axios from 'axios';
 import { MapPin, Phone, Store, Edit, Save, X, RefreshCw } from 'lucide-react';
 import MapComponent from './MapComponent';
 import 'leaflet/dist/leaflet.css';
+import RestaurantHeader from './RestaurantHeader';
 
 const RestaurantInfo = () => {
   const [restaurant, setRestaurant] = useState(null);
@@ -83,66 +84,6 @@ const RestaurantInfo = () => {
     }
   };
 
-  // Handle finding location from address
-  const handleFindLocation = async () => {
-    if (!formData.address) {
-      setMessage({ text: 'Vui lòng nhập địa chỉ trước khi tìm vị trí', type: 'error' });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      
-      // Try with your backend first
-      try {
-        const response = await axios.get(
-          `https://localhost:44308/api/Goong/get-coordinates?address=${encodeURIComponent(formData.address)}`
-        );
-        if (response.data) {
-          setPosition({ lat: response.data.latitude, lon: response.data.longitude });
-          setMessage({ text: 'Đã tìm thấy vị trí', type: 'success' });
-          setLoading(false);
-          return;
-        }
-      } catch (error) {
-        console.log("Backend geocoding không khả dụng, sử dụng phương án dự phòng");
-      }
-
-      // Fallback to Nominatim
-      const nominatimResponse = await axios.get(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.address)}`,
-        {
-          headers: {
-            'Accept': 'application/json'
-          }
-        }
-      );
-
-      if (nominatimResponse.data && nominatimResponse.data.length > 0) {
-        const { lat, lon } = nominatimResponse.data[0];
-        setPosition({ lat: parseFloat(lat), lon: parseFloat(lon) });
-        setMessage({ text: 'Đã tìm thấy vị trí', type: 'success' });
-      } else {
-        setMessage({ text: 'Không tìm thấy vị trí từ địa chỉ đã nhập', type: 'warning' });
-      }
-    } catch (error) {
-      console.error("Geocoding error:", error);
-      setMessage({
-        text: 'Có lỗi xảy ra khi tìm vị trí. Vui lòng click trực tiếp trên bản đồ để chọn vị trí.',
-        type: 'error'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle map click for location selection
-  const handleMapClick = (e) => {
-    if (isEditing) {
-      setPosition({ lat: e.latlng.lat, lon: e.latlng.lng });
-    }
-  };
-
   // Toggle edit mode
   const toggleEditMode = () => {
     if (isEditing) {
@@ -167,11 +108,6 @@ const RestaurantInfo = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!position && formData.address) {
-      setMessage({ text: 'Vui lòng chọn vị trí nhà hàng trên bản đồ hoặc sử dụng nút tìm', type: 'error' });
-      return;
-    }
-
     try {
       setLoading(true);
       const updateFormData = new FormData();
@@ -179,11 +115,6 @@ const RestaurantInfo = () => {
       updateFormData.append('address', formData.address);
       updateFormData.append('phoneNumber', formData.phoneNumber);
       
-      if (position) {
-        updateFormData.append('latitude', position.lat);
-        updateFormData.append('longitude', position.lon);
-      }
-
       if (newRestaurantImage) {
         updateFormData.append('restaurantImage', newRestaurantImage);
       }
@@ -255,6 +186,7 @@ const RestaurantInfo = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
+      <RestaurantHeader/>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Quản Lý Nhà Hàng</h1>
         <button
@@ -302,26 +234,16 @@ const RestaurantInfo = () => {
                   <label className="block text-gray-700 text-sm font-bold mb-2">
                     Địa Chỉ*
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address}
-                      onChange={handleChange}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={handleFindLocation}
-                      className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                      disabled={loading}
-                    >
-                      {loading ? 'Đang tìm...' : 'Tìm'}
-                    </button>
-                  </div>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  />
                   <p className="text-xs text-gray-500 mt-1">
-                    Hoặc bạn có thể click trực tiếp trên bản đồ để chọn vị trí
+                    Tọa độ nhà hàng sẽ được xác định tự động dựa vào địa chỉ
                   </p>
                 </div>
 
@@ -359,7 +281,7 @@ const RestaurantInfo = () => {
                     ) : restaurant.restaurantImage ? (
                       <div className="relative">
                         <img 
-                          src={restaurant.restaurantImage} 
+                          src={`https://localhost:44308${restaurant.restaurantImage}`} 
                           alt={restaurant.name} 
                           className="h-32 object-cover rounded"
                         />
@@ -391,7 +313,7 @@ const RestaurantInfo = () => {
                 <div className="flex items-start mb-6">
                   {restaurant.restaurantImage ? (
                     <img 
-                      src={restaurant.restaurantImage} 
+                      src={`https://localhost:44308${restaurant.restaurantImage}`} 
                       alt={restaurant.name} 
                       className="h-32 w-32 object-cover rounded-lg mr-4"
                     />
@@ -402,7 +324,7 @@ const RestaurantInfo = () => {
                   )}
                   <div>
                     <h2 className="text-xl font-bold">{restaurant.name}</h2>
-                    <p className="text-gray-600">{restaurant.status === "active" ? "Đang hoạt động" : restaurant.status === "pending" ? "Đang chờ duyệt" : "Bị từ chối"}</p>
+                    <p className="text-gray-600">{restaurant.status === "Active" ? "Đang hoạt động" : restaurant.status === "Pending" ? "Đang chờ duyệt" : "Bị từ chối"}</p>
                   </div>
                 </div>
 
@@ -435,20 +357,19 @@ const RestaurantInfo = () => {
               </p>
             ) : (
               <p className="text-sm text-gray-600 mb-2">
-                {isEditing ? "Click vào bản đồ để chọn vị trí" : "Chưa có vị trí"}
+                Chưa có vị trí
               </p>
             )}
             <div className="h-96 rounded-lg overflow-hidden border border-gray-300">
               <MapComponent 
                 locations={mapLocations} 
-                onMapClick={handleMapClick} 
                 center={position ? [position.lat, position.lon] : [10.8231, 106.6297]}
-                interactive={isEditing}
+                interactive={false}
               />
             </div>
             {isEditing && (
               <p className="text-xs text-gray-500 mt-2">
-                Bạn có thể zoom và di chuyển bản đồ để tìm vị trí chính xác hơn
+                Vị trí nhà hàng sẽ được cập nhật tự động dựa trên địa chỉ sau khi lưu thay đổi
               </p>
             )}
           </div>

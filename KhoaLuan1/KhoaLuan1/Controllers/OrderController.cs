@@ -133,9 +133,74 @@ namespace KhoaLuan1.Controllers
                 return StatusCode(500, new { success = false, message = "Có lỗi xảy ra khi xác thực mã giảm giá. Vui lòng thử lại sau." });
             }
         }
+        private (decimal fee, bool isValid, string message) CalculateShippingFee(double distanceKm, List<CartItem> cartItems)
+        {
+            // Phí cơ bản dựa trên khoảng cách
+            const decimal baseFee = 10000m; // Phí cho 2 km đầu
+            const decimal additionalFeePerKm = 3500m; // Phí cho mỗi km tiếp theo
+            const double baseDistance = 2.0; // 2 km đầu
 
+            // Giới hạn số lượng sản phẩm
+            const int maxTotalQuantity = 50; // Giới hạn tổng số lượng
+            const int maxQuantityPerItem = 50; // Giới hạn số lượng cho mỗi sản phẩm
 
-       [HttpPost("create-order")]
+            // Tính phí dựa trên khoảng cách
+            decimal distanceFee;
+            if (distanceKm <= baseDistance)
+            {
+                distanceFee = baseFee;
+            }
+            else
+            {
+                double extraDistance = distanceKm - baseDistance;
+                decimal extraFee = (decimal)extraDistance * additionalFeePerKm;
+                distanceFee = baseFee + extraFee;
+            }
+
+            // Kiểm tra và tính phí dựa trên số lượng sản phẩm
+            int totalQuantity = cartItems.Sum(c => c.Quantity);
+
+            // Kiểm tra nếu số lượng vượt quá giới hạn
+            foreach (var item in cartItems)
+            {
+                if (item.Quantity > maxQuantityPerItem)
+                {
+                    return (0m, false, $"Số lượng cho mỗi sản phẩm không được vượt quá {maxQuantityPerItem}.");
+                }
+            }
+
+            if (totalQuantity > maxTotalQuantity)
+            {
+                return (0m, false, $"Tổng số lượng sản phẩm không được vượt quá {maxTotalQuantity}.");
+            }
+
+            // Tính phí bổ sung dựa trên số lượng
+            decimal quantitySurcharge = 0m;
+            foreach (var item in cartItems)
+            {
+                if (item.Quantity > 10) // Khi số lượng vượt quá 10, bắt đầu tính phí bổ sung
+                {
+                    decimal surchargeRate;
+                    if (item.Quantity <= 20 && item.Quantity > 10)
+                    {
+                        surchargeRate = 0.15m; // Tăng 15% phí vận chuyển
+                    }
+                    else if (item.Quantity <= 30 && item.Quantity > 20)
+                    {
+                        surchargeRate = 0.25m; // Tăng 25% phí vận chuyển
+                    }
+                    else
+                    {
+                        surchargeRate = 0.40m; // Tăng 40% phí vận chuyển
+                    }
+                    quantitySurcharge = distanceFee * surchargeRate;
+                }
+            }
+
+            return (distanceFee + quantitySurcharge, true, "");
+        }
+
+        [HttpPost("create-order")]
 public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
 {
     try
@@ -521,74 +586,7 @@ public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest reque
     }
 }
 
-private (decimal fee, bool isValid, string message) CalculateShippingFee(double distanceKm, List<CartItem> cartItems)
-{
-    // Phí cơ bản dựa trên khoảng cách
-    const decimal baseFee = 10000m; // Phí cho 2 km đầu
-    const decimal additionalFeePerKm = 3500m; // Phí cho mỗi km tiếp theo
-    const double baseDistance = 2.0; // 2 km đầu
-    
-    // Giới hạn số lượng sản phẩm
-    const int maxTotalQuantity = 50; // Giới hạn tổng số lượng
-    const int maxQuantityPerItem = 50; // Giới hạn số lượng cho mỗi sản phẩm
-    
-    // Tính phí dựa trên khoảng cách
-    decimal distanceFee;
-    if (distanceKm <= baseDistance)
-    {
-        distanceFee = baseFee;
-    }
-    else
-    {
-        double extraDistance = distanceKm - baseDistance;
-        decimal extraFee = (decimal)extraDistance * additionalFeePerKm;
-        distanceFee = baseFee + extraFee;
-    }
-    
-    // Kiểm tra và tính phí dựa trên số lượng sản phẩm
-    int totalQuantity = cartItems.Sum(c => c.Quantity);
-    
-    // Kiểm tra nếu số lượng vượt quá giới hạn
-    foreach (var item in cartItems)
-    {
-        if (item.Quantity > maxQuantityPerItem)
-        {
-            return (0m, false, $"Số lượng cho mỗi sản phẩm không được vượt quá {maxQuantityPerItem}.");
-        }
-    }
-    
-    if (totalQuantity > maxTotalQuantity)
-    {
-        return (0m, false, $"Tổng số lượng sản phẩm không được vượt quá {maxTotalQuantity}.");
-    }
-    
-    // Tính phí bổ sung dựa trên số lượng
-    decimal quantitySurcharge = 0m;
-            foreach (var item in cartItems)
-            {
-                if (item.Quantity > 10) // Khi số lượng vượt quá 10, bắt đầu tính phí bổ sung
-                {
-                    decimal surchargeRate;
-                    if (item.Quantity <= 20 && item.Quantity > 10)
-                    {
-                        surchargeRate = 0.15m; // Tăng 15% phí vận chuyển
-                    }
-                    else if (item.Quantity <= 30 && item.Quantity > 20)
-                    {
-                        surchargeRate = 0.25m; // Tăng 25% phí vận chuyển
-                    }
-                    else
-                    {
-                        surchargeRate = 0.40m; // Tăng 40% phí vận chuyển
-                    }
 
-                    quantitySurcharge = distanceFee * surchargeRate;
-                }
-            }
-                
-    
-    return (distanceFee + quantitySurcharge, true, "");
-}
 
 
         [HttpGet("payment-callback")]
@@ -681,6 +679,81 @@ private (decimal fee, bool isValid, string message) CalculateShippingFee(double 
             {
                 _logger.LogError(ex, "Error processing VNPay callback");
                 return Redirect($"{_configuration["ClientUrl"]}/payment/failed?message=System error");
+            }
+        }
+        [HttpGet("payment-success")]
+        public async Task<IActionResult> PaymentSuccess(long orderId, string vnp_ResponseCode, string vnp_TransactionNo)
+        {
+            try
+            {
+                // 1. Kiểm tra đơn hàng trong database
+                var order = await _context.Orders.FindAsync(orderId);
+                if (order == null)
+                {
+                    // Chuyển hướng về front-end với thông báo lỗi
+                    return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString($"Không tìm thấy đơn hàng #{orderId}")}");
+                }
+
+                // 2. Kiểm tra mã phản hồi từ VNPay
+                if (vnp_ResponseCode != "00") // 00 là mã thành công
+                {
+                    // Chuyển hướng về front-end với thông báo lỗi
+                    return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString($"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}")}&orderId={orderId}");
+                }
+
+                // 3. Cập nhật trạng thái đơn hàng nếu chưa cập nhật
+                if (order.PaymentStatus != "Paid")
+                {
+                    order.PaymentStatus = "Paid";
+                    order.TransactionId = vnp_TransactionNo;
+                    order.PaymentDate = DateTime.UtcNow;
+                    order.Status = "Processing"; // Chuyển sang trạng thái đang xử lý
+                    await _context.SaveChangesAsync();
+
+                    // Gửi thông báo/email xác nhận
+                    // TODO: Implement notification/email logic here
+                }
+
+                // 4. Chuyển hướng về front-end với thông báo thành công
+                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=true&orderId={orderId}&amount={order.TotalAmount}&transactionId={vnp_TransactionNo}&message={Uri.EscapeDataString("Thanh toán thành công. Đơn hàng đang được xử lý.")}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Lỗi khi xử lý kết quả thanh toán thành công cho đơn hàng {orderId}");
+                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString("Đã xảy ra lỗi khi xử lý kết quả thanh toán")}&orderId={orderId}");
+            }
+        }
+
+        [HttpGet("payment-failed")]
+        public async Task<IActionResult> PaymentFailed(string message, long? orderId = null)
+        {
+            try
+            {
+                // Nếu có orderId, thêm thông tin đơn hàng
+                if (orderId.HasValue)
+                {
+                    var order = await _context.Orders.FindAsync(orderId.Value);
+                    if (order != null)
+                    {
+                        // Cập nhật trạng thái nếu cần
+                        if (order.PaymentStatus != "Failed")
+                        {
+                            order.PaymentStatus = "Failed";
+                            await _context.SaveChangesAsync();
+                        }
+
+                        // Chuyển hướng về front-end với thông tin đơn hàng
+                        return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString(message)}&orderId={orderId}&amount={order.TotalAmount}");
+                    }
+                }
+
+                // Chuyển hướng về front-end chỉ với thông báo
+                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString(message)}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Lỗi khi xử lý trang thanh toán thất bại. OrderId: {orderId}");
+                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString("Đã xảy ra lỗi hệ thống. Vui lòng liên hệ hỗ trợ.")}");
             }
         }
 
@@ -1356,14 +1429,17 @@ private (decimal fee, bool isValid, string message) CalculateShippingFee(double 
                 return BadRequest(new { message = "Đơn hàng không trong quá trình giao." });
             }
 
-            // Tạo bản ghi theo dõi vị trí
+            // Tạo bản ghi theo dõi vị trí với múi giờ Việt Nam (UTC+7)
+            var vietnamTimeZone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); // ID múi giờ cho Việt Nam
+            var vietnamNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, vietnamTimeZone);
+
             var tracking = new DeliveryTracking
             {
                 OrderId = request.OrderId.Value,
                 DeliveryPersonId = userId.Value,
                 Latitude = (decimal)request.Latitude.Value,
                 Longitude = (decimal)request.Longitude.Value,
-                TrackingTime = DateTime.UtcNow
+                TrackingTime = vietnamNow // Sử dụng thời gian theo múi giờ Việt Nam
             };
 
             _context.DeliveryTrackings.Add(tracking);
@@ -1382,7 +1458,7 @@ private (decimal fee, bool isValid, string message) CalculateShippingFee(double 
             return Ok(new { message = "Vị trí đã được cập nhật thành công." });
         }
 
-      
+
 
 
 
@@ -1651,103 +1727,7 @@ private (decimal fee, bool isValid, string message) CalculateShippingFee(double 
             return Ok(new { message = "Đơn hàng đã được hủy thành công." });
         }
 
-        [HttpGet("payment-success/{orderId}")]
-        public async Task<IActionResult> PaymentSuccess(long orderId, string vnp_ResponseCode, string vnp_TransactionNo)
-        {
-            try
-            {
-                // 1. Kiểm tra đơn hàng trong database
-                var order = await _context.Orders.FindAsync(orderId);
-                if (order == null)
-                {
-                    return RedirectToAction("PaymentFailed", new
-                    {
-                        message = $"Không tìm thấy đơn hàng #{orderId}"
-                    });
-                }
-                // 2. Kiểm tra mã phản hồi từ VNPay
-                if (vnp_ResponseCode != "00") // 00 là mã thành công
-                {
-                    return RedirectToAction("PaymentFailed", new
-                    {
-                        message = $"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}",
-                        orderId = orderId
-                    });
-                }
-                // 3. Cập nhật trạng thái đơn hàng nếu chưa cập nhật
-                if (order.PaymentStatus != "Paid")
-                {
-                    order.PaymentStatus = "Paid";
-                    order.TransactionId = vnp_TransactionNo;
-                    order.PaymentDate = DateTime.UtcNow;
-                    order.Status = "Processing"; // Chuyển sang trạng thái đang xử lý
-
-                    await _context.SaveChangesAsync();
-
-                    // Gửi thông báo/email xác nhận
-                   
-                }
-                // 4. Trả về kết quả thành công
-                return Ok(new PaymentResultViewModel
-                {
-                    Success = true,
-                    OrderId = orderId,
-                    Amount = order.TotalAmount,
-                    TransactionId = vnp_TransactionNo,
-                    PaymentDate = DateTime.UtcNow,
-                    Message = "Thanh toán thành công. Đơn hàng đang được xử lý."
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Lỗi khi xử lý kết quả thanh toán thành công cho đơn hàng {orderId}");
-                return BadRequest(new
-                {
-                    message = "Đã xảy ra lỗi khi xử lý kết quả thanh toán",
-                    orderId = orderId
-                });
-            }
-        }
-
-        [HttpGet("payment-failed")]
-        public async Task<IActionResult> PaymentFailed(string message, long? orderId = null)
-        {
-            try
-            {
-                PaymentResultViewModel model = new()
-                {
-                    Success = false,
-                    Message = message
-                };
-                // Nếu có orderId, thêm thông tin đơn hàng
-                if (orderId.HasValue)
-                {
-                    var order = await _context.Orders.FindAsync(orderId.Value);
-                    if (order != null)
-                    {
-                        model.OrderId = order.OrderId;
-                        model.Amount = order.TotalAmount;
-
-                        // Cập nhật trạng thái nếu cần
-                        if (order.PaymentStatus != "Failed")
-                        {
-                            order.PaymentStatus = "Failed";
-                            await _context.SaveChangesAsync();
-                        }
-                    }
-                }
-                return Ok(model);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"Lỗi khi xử lý trang thanh toán thất bại. OrderId: {orderId}");
-                return BadRequest(new
-                {
-                    Success = false,
-                    Message = "Đã xảy ra lỗi hệ thống. Vui lòng liên hệ hỗ trợ."
-                });
-            }
-        }
+       
 
     }
     public class PaymentResultViewModel

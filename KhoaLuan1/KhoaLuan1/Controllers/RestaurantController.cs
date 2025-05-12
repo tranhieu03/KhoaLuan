@@ -157,6 +157,8 @@ namespace KhoaLuan1.Controllers
                 RestaurantId = restaurant.RestaurantId,
                 Name = restaurant.Name,
                 Address = restaurant.Address,
+                Latitude = restaurant.Latitude,
+                Longitude = restaurant.Longitude,
                 PhoneNumber = restaurant.PhoneNumber,
                 SellerId = restaurant.SellerId,
                 Status = restaurant.Status,
@@ -199,19 +201,10 @@ namespace KhoaLuan1.Controllers
                 {
                     restaurant.Address = model.Address;
 
-                    // Update coordinates if needed
-                    if (model.Latitude.HasValue && model.Longitude.HasValue)
-                    {
-                        restaurant.Latitude = model.Latitude.Value;
-                        restaurant.Longitude = model.Longitude.Value;
-                    }
-                    else
-                    {
-                        // Get coordinates from the address
-                        (double lat, double lng) = await _mapService.GetCoordinates(model.Address);
-                        restaurant.Latitude = lat;
-                        restaurant.Longitude = lng;
-                    }
+                    // Luôn lấy tọa độ từ địa chỉ mới, bỏ qua tọa độ người dùng nhập (nếu có)
+                    (double lat, double lng) = await _mapService.GetCoordinates(model.Address);
+                    restaurant.Latitude = lat;
+                    restaurant.Longitude = lng;
                 }
 
                 if (!string.IsNullOrEmpty(model.PhoneNumber))
@@ -239,7 +232,21 @@ namespace KhoaLuan1.Controllers
                 _context.Entry(restaurant).State = EntityState.Modified;
                 await _context.SaveChangesAsync();
 
-                return Ok(new { message = "Restaurant updated successfully.", restaurant });
+                return Ok(new
+                {
+                    message = "Restaurant updated successfully.",
+                    restaurant = new
+                    {
+                        restaurant.RestaurantId,
+                        restaurant.Name,
+                        restaurant.Address,
+                        restaurant.Latitude,
+                        restaurant.Longitude,
+                        restaurant.PhoneNumber,
+                        restaurant.Status,
+                        restaurant.RestaurantImage
+                    }
+                });
             }
             catch (Exception ex)
             {
@@ -270,9 +277,12 @@ namespace KhoaLuan1.Controllers
     }
     public class RestaurantDetailDTO
     {
+
         public int RestaurantId { get; set; }
         public string Name { get; set; }
         public string Address { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public string PhoneNumber { get; set; }
         public string Description { get; set; }
         public int SellerId { get; set; }
