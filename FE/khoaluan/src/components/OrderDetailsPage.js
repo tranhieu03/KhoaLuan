@@ -194,16 +194,16 @@ const OrderDetailsPage = () => {
                   <div key={index} className="p-4 flex">
                     <div className="flex-shrink-0 w-24 h-24">
                       {item.productImage ? (
-                        <img 
-                          src={`https://localhost:44308/${item.productImage}`} 
-                          alt={item.productName}
-                          className="w-full h-full object-cover rounded-md"
-                          onError={(e) => {
-                            e.target.src = '/images/default-product.png'; // Fallback image if loading fails
-                            e.target.onerror = null;
-                          }}
-                        />
-                      ) : (
+  <img 
+    src={item.productImage.startsWith('http') ? item.productImage : `https://localhost:44308/${item.productImage}`} 
+    alt={item.productName}
+    className="w-full h-full object-cover rounded-md"
+    onError={(e) => {
+      e.target.src = '/images/default-product.png'; // Fallback image if loading fails
+      e.target.onerror = null;
+    }}
+  />
+) : (
                         <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-md">
                           <Package className="w-8 h-8 text-gray-400" />
                         </div>

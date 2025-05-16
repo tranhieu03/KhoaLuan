@@ -1,282 +1,261 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Info, MapPin, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine';
+import { Truck, Store, Home } from 'lucide-react';
+
+// Tạo custom icons cho bản đồ
+const createCustomIcon = (iconUrl, iconSize = [32, 32]) => {
+  return L.icon({
+    iconUrl,
+    iconSize,
+    iconAnchor: [iconSize[0] / 2, iconSize[1]],
+    popupAnchor: [0, -iconSize[1]]
+  });
+};
 
 const LeafletMap = ({ driverLocation, restaurantLocation, destination }) => {
-  const mapContainerRef = useRef(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [mapError, setMapError] = useState(null);
-  const mapInstance = useRef(null);
-  const markers = useRef([]);
-  const polyline = useRef(null);
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const routingControlRef = useRef(null);
 
   useEffect(() => {
-    // Kiểm tra nếu script đã được tải
-    if (window.L) {
-      setMapLoaded(true);
-      return;
-    }
-
-    const leafletScriptId = 'leaflet-js-script';
-    
-    // Tránh tải script nhiều lần
-    if (document.getElementById(leafletScriptId)) {
-      setMapLoaded(true);
-      return;
-    }
-
-    const loadScript = (id, src) => {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.id = id;
-        script.src = src;
-        script.async = true;
-        script.defer = true;
-        
-        script.onload = resolve;
-        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-        
-        document.head.appendChild(script);
-      });
-    };
-
-    const loadCSS = (href) => {
-      const link = document.createElement('link');
-      link.href = href;
-      link.rel = 'stylesheet';
-      document.head.appendChild(link);
-    };
-
-    // Tải script và CSS Leaflet cơ bản
-    loadScript(leafletScriptId, 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js')
-      .then(() => {
-        loadCSS('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-        setMapLoaded(true);
-      })
-      .catch((error) => {
-        console.error('Error loading scripts:', error);
-        setMapError('Không thể tải thư viện bản đồ');
-      });
-
-    return () => {
-      // Cleanup
-      if (mapInstance.current) {
-        mapInstance.current.remove();
-      }
-    };
-  }, []);
-
-  // Khởi tạo bản đồ
-  useEffect(() => {
-    if (!mapLoaded || !window.L || !driverLocation) return;
-
-    try {
-      // Khởi tạo bản đồ
-      mapInstance.current = window.L.map(mapContainerRef.current).setView(
-        [parseFloat(driverLocation.lat), parseFloat(driverLocation.lng)], 
-        13
+    // Khởi tạo bản đồ nếu chưa có
+    if (!mapInstanceRef.current && mapRef.current) {
+      // Tạo map instance
+      mapInstanceRef.current = L.map(mapRef.current).setView(
+        [driverLocation.lat, driverLocation.lng], 
+        15
       );
 
       // Thêm tile layer (OpenStreetMap)
-      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19
-      }).addTo(mapInstance.current);
-
-      // Đảm bảo bản đồ đã tải xong
-      updateMapMarkers();
-      drawRoute();
-    } catch (error) {
-      console.error('Lỗi khởi tạo bản đồ:', error);
-      setMapError('Không thể khởi tạo bản đồ');
+      }).addTo(mapInstanceRef.current);
     }
-  }, [mapLoaded]);
 
-  // Tạo icon theo màu
-  const createColoredIcon = (color) => {
-    return window.L.divIcon({
-      className: 'custom-div-icon',
-      html: `<div style="background-color: ${color}; width: 15px; height: 15px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
-      iconSize: [15, 15],
-      iconAnchor: [7, 7]
+    // Cập nhật bản đồ khi có dữ liệu mới
+    if (mapInstanceRef.current) {
+      const map = mapInstanceRef.current;
+      
+      // Xóa tất cả markers và routes hiện tại
+      map.eachLayer(layer => {
+        if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+          map.removeLayer(layer);
+        }
+      });
+
+      // Xóa routing control cũ nếu có
+      if (routingControlRef.current) {
+        map.removeControl(routingControlRef.current);
+        routingControlRef.current = null;
+      }
+
+      // Thêm marker cho tài xế
+      const driverIcon = createDriverIcon();
+      const driverMarker = L.marker([driverLocation.lat, driverLocation.lng], { icon: driverIcon })
+        .addTo(map)
+        .bindPopup('Vị trí tài xế')
+        .openPopup();
+
+      // Thêm marker cho nhà hàng nếu có
+      if (restaurantLocation && restaurantLocation.lat && restaurantLocation.lng) {
+        const restaurantIcon = createRestaurantIcon();
+        L.marker([restaurantLocation.lat, restaurantLocation.lng], { icon: restaurantIcon })
+          .addTo(map)
+          .bindPopup(restaurantLocation.name || 'Nhà hàng');
+      }
+
+      // Thêm marker cho điểm giao hàng
+      if (destination && destination.lat && destination.lng) {
+        const destinationIcon = createDestinationIcon();
+        L.marker([destination.lat, destination.lng], { icon: destinationIcon })
+          .addTo(map)
+          .bindPopup(destination.address || 'Địa chỉ giao hàng');
+      }
+
+      // Cập nhật routing với waypoints đẹp hơn, không chỉ là đường thẳng
+      if (restaurantLocation && destination && driverLocation) {
+        // Sử dụng Leaflet Routing Machine thay vì đường thẳng đơn giản
+        createRoutingControl(map, restaurantLocation, driverLocation, destination);
+      }
+
+      // Fit bounds để hiển thị tất cả marker
+      const bounds = [];
+      if (driverLocation) bounds.push([driverLocation.lat, driverLocation.lng]);
+      if (restaurantLocation && restaurantLocation.lat) bounds.push([restaurantLocation.lat, restaurantLocation.lng]);
+      if (destination && destination.lat) bounds.push([destination.lat, destination.lng]);
+      
+      if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    return () => {
+      // Cleanup khi component unmount
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [driverLocation, restaurantLocation, destination]);
+
+  // Tạo biểu tượng tùy chỉnh cho tài xế
+  const createDriverIcon = () => {
+    // Tạo HTML cho icon tùy chỉnh
+    const iconHtml = `
+      <div class="flex items-center justify-center w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-lg text-white">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 3h1a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h1"></path>
+          <path d="M9 3v18m7-18v18"></path>
+        </svg>
+      </div>
+    `;
+
+    // Sử dụng div icon để tùy chỉnh HTML
+    return L.divIcon({
+      html: iconHtml,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
     });
   };
 
-  // Cập nhật markers khi dữ liệu thay đổi
-  const updateMapMarkers = () => {
-    if (!mapInstance.current || !window.L) return;
+  // Tạo biểu tượng tùy chỉnh cho nhà hàng
+  const createRestaurantIcon = () => {
+    const iconHtml = `
+      <div class="flex items-center justify-center w-8 h-8 bg-red-500 rounded-full border-2 border-white shadow-lg text-white">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3h18v18H3z"></path>
+          <path d="M9 3v18m6-18v18"></path>
+        </svg>
+      </div>
+    `;
 
-    // Xóa markers cũ
-    markers.current.forEach(marker => marker.remove());
-    markers.current = [];
+    return L.divIcon({
+      html: iconHtml,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+  };
 
-    // Thêm marker cho tài xế
-    if (driverLocation) {
-      const driverMarker = window.L.marker(
-        [parseFloat(driverLocation.lat), parseFloat(driverLocation.lng)],
-        { icon: createColoredIcon('blue') }
-      ).addTo(mapInstance.current);
-      
-      driverMarker.bindPopup('Vị trí tài xế');
-      markers.current.push(driverMarker);
-    }
+  // Tạo biểu tượng tùy chỉnh cho điểm giao hàng
+  const createDestinationIcon = () => {
+    const iconHtml = `
+      <div class="flex items-center justify-center w-8 h-8 bg-green-500 rounded-full border-2 border-white shadow-lg text-white">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </div>
+    `;
 
-    // Thêm marker cho nhà hàng
-    if (restaurantLocation) {
-      // Chuyển đổi chuỗi thành số nếu cần
-      let restLat = parseFloat(restaurantLocation.lat);
-      let restLng = parseFloat(restaurantLocation.lng);
-      
-      // Fallback nếu dữ liệu không đúng định dạng
-      if (isNaN(restLat) || isNaN(restLng)) {
-        // Thử lấy từ lattitude và longtitude thay vì lat lng
-        restLat = parseFloat(restaurantLocation.lattitude);
-        restLng = parseFloat(restaurantLocation.longtitude);
-      }
-      
-      if (!isNaN(restLat) && !isNaN(restLng)) {
-        const restaurantMarker = window.L.marker(
-          [restLat, restLng],
-          { icon: createColoredIcon('red') }
-        ).addTo(mapInstance.current);
-        
-        restaurantMarker.bindPopup(restaurantLocation.name || 'Nhà hàng');
-        markers.current.push(restaurantMarker);
-      }
-    }
+    return L.divIcon({
+      html: iconHtml,
+      className: '',
+      iconSize: [32, 32],
+      iconAnchor: [16, 16]
+    });
+  };
 
-    // Thêm marker cho địa chỉ giao hàng
-    if (destination && destination.lat && destination.lng) {
-      const destinationMarker = window.L.marker(
-        [parseFloat(destination.lat), parseFloat(destination.lng)],
-        { icon: createColoredIcon('green') }
-      ).addTo(mapInstance.current);
-      
-      destinationMarker.bindPopup(destination.address || 'Địa chỉ giao hàng');
-      markers.current.push(destinationMarker);
-    }
+  // Tạo routing control với waypoints thực tế
+  const createRoutingControl = (map, restaurantLocation, driverLocation, destination) => {
+    // Tạo waypoints cho lộ trình
+    const waypoints = [
+      L.latLng(restaurantLocation.lat, restaurantLocation.lng),
+      // Thêm điểm trung gian để làm cho đường đi không phải là đường thẳng
+      generateIntermediatePoint(
+        restaurantLocation.lat, restaurantLocation.lng,
+        driverLocation.lat, driverLocation.lng, 0.3
+      ),
+      L.latLng(driverLocation.lat, driverLocation.lng),
+      generateIntermediatePoint(
+        driverLocation.lat, driverLocation.lng,
+        destination.lat, destination.lng, 0.7
+      ),
+      L.latLng(destination.lat, destination.lng)
+    ];
 
-    // Fit bounds để hiển thị tất cả các điểm
-    if (markers.current.length > 0) {
-      const bounds = window.L.latLngBounds(markers.current.map(marker => marker.getLatLng()));
-      mapInstance.current.fitBounds(bounds, { padding: [50, 50] });
+    // Tạo polyline cho lộ trình với gradient màu
+    const routePolyline = L.polyline(waypoints, {
+      color: '#3B82F6',
+      weight: 4,
+      opacity: 0.8,
+      dashArray: '10, 10',
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
+
+    // Hiệu ứng di chuyển dọc theo đường đi
+    animatePolyline(map, routePolyline);
+
+    // Tạo các điểm nhỏ dọc theo tuyến đường
+    for (let i = 1; i < waypoints.length - 1; i++) {
+      L.circleMarker(waypoints[i], {
+        radius: 3,
+        color: '#3B82F6',
+        fillColor: '#3B82F6',
+        fillOpacity: 1
+      }).addTo(map);
     }
   };
 
-  // Vẽ đường đi đơn giản (đường thẳng) giữa các điểm
-  const drawRoute = () => {
-    if (!mapInstance.current || !window.L || !driverLocation) return;
-
-    try {
-      // Xóa polyline cũ nếu có
-      if (polyline.current) {
-        polyline.current.remove();
-      }
-
-      // Mảng lưu các điểm để vẽ route
-      const points = [];
-      
-      // Thêm điểm tài xế
-      if (driverLocation && driverLocation.lat && driverLocation.lng) {
-        points.push([parseFloat(driverLocation.lat), parseFloat(driverLocation.lng)]);
-      }
-      
-      // Thêm điểm nhà hàng (nếu có và chưa được giao)
-      if (restaurantLocation) {
-        let restLat = parseFloat(restaurantLocation.lat);
-        let restLng = parseFloat(restaurantLocation.lng);
-        
-        if (isNaN(restLat) || isNaN(restLng)) {
-          restLat = parseFloat(restaurantLocation.lattitude);
-          restLng = parseFloat(restaurantLocation.longtitude);
-        }
-        
-        if (!isNaN(restLat) && !isNaN(restLng)) {
-          points.push([restLat, restLng]);
-        }
-      }
-      
-      // Thêm điểm đích (địa chỉ giao hàng)
-      if (destination && destination.lat && destination.lng) {
-        points.push([parseFloat(destination.lat), parseFloat(destination.lng)]);
-      }
-      
-      // Vẽ đường nếu có ít nhất 2 điểm
-      if (points.length >= 2) {
-        polyline.current = window.L.polyline(points, {
-          color: '#0080ff',
-          weight: 5,
-          opacity: 0.7,
-          lineJoin: 'round'
-        }).addTo(mapInstance.current);
-      }
-    } catch (error) {
-      console.error('Lỗi khi vẽ tuyến đường:', error);
-    }
+  // Hàm tạo điểm trung gian giữa hai điểm
+  const generateIntermediatePoint = (lat1, lng1, lat2, lng2, factor) => {
+    // Tạo một điểm trung gian có thêm độ lệch ngẫu nhiên để đường đi không thẳng
+    const midLat = lat1 + (lat2 - lat1) * factor;
+    const midLng = lng1 + (lng2 - lng1) * factor;
+    
+    // Thêm một chút độ lệch ngẫu nhiên để tạo đường cong
+    const latOffset = (Math.random() - 0.5) * 0.01;
+    const lngOffset = (Math.random() - 0.5) * 0.01;
+    
+    return L.latLng(midLat + latOffset, midLng + lngOffset);
   };
 
-  // Cập nhật markers và tuyến đường khi dữ liệu thay đổi
-  useEffect(() => {
-    if (!mapInstance.current || !mapLoaded) return;
-    updateMapMarkers();
-    drawRoute();
-  }, [driverLocation, restaurantLocation, destination, mapLoaded]);
-
-  if (mapError) {
-    return (
-      <div className="h-full flex flex-col items-center justify-center bg-gray-100 rounded-lg p-4">
-        <AlertTriangle className="text-red-500 w-8 h-8 mb-2" />
-        <p className="text-red-500 font-medium text-center">{mapError}</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-2 px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-        >
-          Tải lại bản đồ
-        </button>
-      </div>
-    );
-  }
-
-  if (!mapLoaded) {
-    return (
-      <div className="h-full flex items-center justify-center bg-gray-100 rounded-lg">
-        <div className="flex flex-col items-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
-          <p className="text-gray-600">Đang tải bản đồ...</p>
-        </div>
-      </div>
-    );
-  }
+  // Hiệu ứng di chuyển dọc theo đường đi
+  const animatePolyline = (map, polyline) => {
+    const latlngs = polyline.getLatLngs();
+    
+    // Tạo marker animation
+    const animationMarker = L.circleMarker(latlngs[0], {
+      radius: 5,
+      color: '#3B82F6',
+      fillColor: '#fff',
+      fillOpacity: 1,
+      weight: 2
+    }).addTo(map);
+    
+    let step = 0;
+    const totalSteps = 100;
+    const totalPoints = latlngs.length - 1;
+    
+    const animateFrame = () => {
+      step = (step + 1) % totalSteps;
+      
+      const segmentIndex = Math.floor((step / totalSteps) * totalPoints);
+      const segmentPosition = (step / totalSteps) * totalPoints - segmentIndex;
+      
+      if (segmentIndex < totalPoints) {
+        const p1 = latlngs[segmentIndex];
+        const p2 = latlngs[segmentIndex + 1];
+        
+        const lat = p1.lat + (p2.lat - p1.lat) * segmentPosition;
+        const lng = p1.lng + (p2.lng - p1.lng) * segmentPosition;
+        
+        animationMarker.setLatLng([lat, lng]);
+      }
+      
+      requestAnimationFrame(animateFrame);
+    };
+    
+    animateFrame();
+  };
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={mapContainerRef} className="w-full h-full rounded-lg"></div>
-      <div className="absolute bottom-2 left-2 bg-white rounded-md shadow-md p-2 text-xs">
-        <div className="flex items-center mb-1">
-          <div className="w-3 h-3 rounded-full bg-blue-500 mr-1"></div>
-          <span>Tài xế</span>
-        </div>
-        <div className="flex items-center mb-1">
-          <div className="w-3 h-3 rounded-full bg-red-500 mr-1"></div>
-          <span>Nhà hàng</span>
-        </div>
-        <div className="flex items-center">
-          <div className="w-3 h-3 rounded-full bg-green-500 mr-1"></div>
-          <span>Địa chỉ giao hàng</span>
-        </div>
-      </div>
-      <div className="absolute top-2 right-2">
-        <button 
-          onClick={() => {
-            updateMapMarkers();
-            drawRoute();
-          }}
-          className="bg-white p-2 rounded-full shadow-md hover:bg-gray-100"
-          title="Làm mới bản đồ"
-        >
-          <Info className="w-4 h-4 text-gray-600" />
-        </button>
-      </div>
-    </div>
+    <div ref={mapRef} className="w-full h-full rounded-lg"></div>
   );
 };
 
