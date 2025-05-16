@@ -201,391 +201,390 @@ namespace KhoaLuan1.Controllers
         }
 
         [HttpPost("create-order")]
-public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
-{
-    try
-    {
-        _logger.LogInformation("Bắt đầu xử lý yêu cầu tạo đơn hàng");
-
-        // 1. Xác thực người dùng
-        var userId = HttpContext.Session.GetInt32("UserId");
-        if (userId == null)
+        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Người dùng chưa đăng nhập");
-            return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
-        }
-
-        var user = await _context.Users.FindAsync(userId);
-        if (user == null)
-        {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không tìm thấy thông tin người dùng {UserId}", userId);
-            return NotFound(new { success = false, message = "Không tìm thấy thông tin người dùng." });
-        }
-
-        // 2. Xác thực địa chỉ giao hàng
-        string deliveryAddress = null;
-        double orderLat = 0, orderLng = 0;
-
-        // Thứ tự ưu tiên:
-        // 1. Địa chỉ từ request (người dùng nhập trực tiếp)
-        // 2. Tọa độ từ request (vị trí hiện tại)
-        // 3. Địa chỉ từ database của người dùng
-
-        if (!string.IsNullOrEmpty(request.Address))
-        {
-            // 2.1 Sử dụng địa chỉ từ request
-            deliveryAddress = request.Address;
-            _logger.LogInformation("Sử dụng địa chỉ từ request: {Address}", deliveryAddress);
-
-            // Lấy tọa độ từ địa chỉ
             try
             {
-                (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
-                _logger.LogInformation("Đã lấy tọa độ từ địa chỉ: {Lat}, {Lng}", orderLat, orderLng);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
-                return BadRequest(new { success = false, message = "Không thể xác định vị trí từ địa chỉ đã nhập. Vui lòng kiểm tra lại địa chỉ." });
-            }
-        }
-        else if (request.Latitude.HasValue && request.Longitude.HasValue)
-        {
-            // 2.2 Sử dụng tọa độ từ request
-            orderLat = request.Latitude.Value;
-            orderLng = request.Longitude.Value;
+                _logger.LogInformation("Bắt đầu xử lý yêu cầu tạo đơn hàng");
 
-            // Lấy địa chỉ từ tọa độ
-            try
-            {
-                deliveryAddress = await _mapService.GetAddressFromCoordinates(orderLat, orderLng);
-                _logger.LogInformation("Đã lấy địa chỉ từ tọa độ: {Address}", deliveryAddress);
-
-                // Lưu địa chỉ này vào thông tin người dùng
-                user.Address = deliveryAddress;
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("Đã cập nhật địa chỉ người dùng trong database");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Không thể lấy địa chỉ từ tọa độ: {Lat}, {Lng}", orderLat, orderLng);
-                return BadRequest(new { success = false, message = "Không thể xác định địa chỉ từ vị trí hiện tại. Vui lòng nhập địa chỉ thủ công." });
-            }
-        }
-        else if (!string.IsNullOrEmpty(user.Address))
-        {
-            // 2.3 Sử dụng địa chỉ từ database
-            deliveryAddress = user.Address;
-
-            // Kiểm tra nếu có tọa độ trong database
-            if (!string.IsNullOrEmpty(user.Address))
-            {
-                (orderLat, orderLng) = await _mapService.GetCoordinates(user.Address);
-                _logger.LogInformation("Sử dụng tọa độ từ database: {Lat}, {Lng}", orderLat, orderLng);
-            }
-            else
-            {
-                // Nếu không có tọa độ, lấy tọa độ từ địa chỉ
-                try
+                // 1. Xác thực người dùng
+                var userId = HttpContext.Session.GetInt32("UserId");
+                if (userId == null)
                 {
-                    (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
-                    _logger.LogInformation("Đã lấy tọa độ từ địa chỉ database: {Lat}, {Lng}", orderLat, orderLng);
-
-                    // Cập nhật tọa độ vào database
-                    await _context.SaveChangesAsync();
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Người dùng chưa đăng nhập");
+                    return Unauthorized(new { success = false, message = "Vui lòng đăng nhập để tiếp tục." });
                 }
-                catch (Exception ex)
+
+                var user = await _context.Users.FindAsync(userId);
+                if (user == null)
                 {
-                    _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ database: {Address}", deliveryAddress);
-                    return BadRequest(new { success = false, message = "Không thể xác định vị trí từ địa chỉ của bạn. Vui lòng nhập địa chỉ mới." });
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không tìm thấy thông tin người dùng {UserId}", userId);
+                    return NotFound(new { success = false, message = "Không tìm thấy thông tin người dùng." });
                 }
-            }
-        }
-        else
-        {
-            // 2.4 Không có địa chỉ, yêu cầu người dùng nhập
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Thiếu địa chỉ giao hàng");
-            return BadRequest(new
-            {
-                success = false,
-                requireAddress = true,
-                message = "Vui lòng cung cấp địa chỉ giao hàng hoặc cho phép truy cập vị trí hiện tại."
-            });
-        }
 
-        // 3. Kiểm tra giỏ hàng
-        if (request.SelectedCartItems == null || !request.SelectedCartItems.Any())
-        {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không có sản phẩm được chọn");
-            return BadRequest(new { success = false, message = "Vui lòng chọn ít nhất một sản phẩm để đặt hàng." });
-        }
+                // 2. Xác thực địa chỉ giao hàng
+                string deliveryAddress = null;
+                double orderLat = 0, orderLng = 0;
 
-        var cartItems = await _context.CartItems
-            .Where(c => c.UserId == userId && request.SelectedCartItems.Contains(c.CartItemId))
-            .Include(c => c.Product)
-            .ThenInclude(p => p.Restaurant)
-            .ToListAsync();
+                // Thứ tự ưu tiên:
+                // 1. Địa chỉ từ request (người dùng nhập trực tiếp)
+                // 2. Tọa độ từ request (vị trí hiện tại)
+                // 3. Địa chỉ từ database của người dùng
 
-        if (!cartItems.Any())
-        {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không tìm thấy sản phẩm đã chọn");
-            return BadRequest(new { success = false, message = "Không tìm thấy sản phẩm đã chọn hoặc giỏ hàng trống." });
-        }
-
-        // 4. Kiểm tra món ăn từ nhiều nhà hàng
-        var distinctRestaurantIds = cartItems.Select(c => c.Product.RestaurantId).Distinct().ToList();
-        if (distinctRestaurantIds.Count > 1)
-        {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Sản phẩm từ nhiều nhà hàng khác nhau");
-            return BadRequest(new { success = false, message = "Bạn không thể chọn món ăn từ nhiều nhà hàng khác nhau trong cùng một đơn hàng." });
-        }
-
-        // 5. Lấy thông tin nhà hàng và kiểm tra nếu người dùng đặt hàng từ nhà hàng của chính họ
-        var restaurantId = distinctRestaurantIds.First();
-        var restaurant = cartItems.First().Product.Restaurant;
-
-        // Kiểm tra nếu người dùng là chủ nhà hàng (seller)
-        if (restaurant.SellerId == userId)
-        {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Người dùng không thể đặt hàng từ nhà hàng của chính mình");
-            return BadRequest(new { success = false, message = "Bạn không thể đặt hàng từ nhà hàng của chính mình." });
-        }
-
-        double restaurantLat = (double)restaurant.Latitude;
-        double restaurantLng = (double)restaurant.Longitude;
-
-        // 6. Lấy tọa độ địa chỉ giao hàng
-        try
-        {
-            _logger.LogInformation("Đang lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
-            (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
-            _logger.LogInformation("Đã lấy tọa độ thành công: {Lat}, {Lng}", orderLat, orderLng);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ giao hàng: {Address}", deliveryAddress);
-            return BadRequest(new { success = false, message = $"Không thể xác định vị trí địa chỉ giao hàng. Vui lòng kiểm tra lại địa chỉ." });
-        }
-
-        // 7. Tính khoảng cách và phí vận chuyển
-        double? distanceKm;
-        try
-        {
-            _logger.LogInformation("Đang tính khoảng cách giữa nhà hàng và địa chỉ giao hàng");
-            distanceKm = await _mapService.CalculateDistanceAsync(restaurantLat, restaurantLng, orderLat, orderLng);
-            if (distanceKm == null)
-            {
-                _logger.LogWarning("Không thể tính khoảng cách đường đi");
-                return BadRequest(new { success = false, message = "Không thể tính khoảng cách đường đi. Vui lòng thử lại sau." });
-            }
-            _logger.LogInformation("Khoảng cách: {Distance} km", distanceKm);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Lỗi khi tính khoảng cách đường đi");
-            return BadRequest(new { success = false, message = "Không thể tính khoảng cách đường đi. Vui lòng thử lại sau." });
-        }
-
-        // 8. Tính toán phí vận chuyển với logic mới
-        var (shippingFee, isValidShipping, shippingErrorMessage) = CalculateShippingFee(distanceKm.Value, cartItems);
-        
-        // Kiểm tra nếu đơn hàng không hợp lệ dựa trên số lượng sản phẩm
-        if (!isValidShipping)
-        {
-            _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: {Message}", shippingErrorMessage);
-            return BadRequest(new { success = false, message = shippingErrorMessage });
-        }
-
-        // 9. Tính toán giá trị đơn hàng
-        decimal productTotal = cartItems.Sum(c => c.Quantity * c.Product.Price);
-        decimal discountAmount = 0;
-        Voucher? appliedVoucher = null;
-
-        // 10. Xử lý voucher nếu có
-        if (!string.IsNullOrEmpty(request.VoucherCode))
-        {
-            _logger.LogInformation("Processing voucher: {VoucherCode}", request.VoucherCode);
-
-            // Get product IDs for voucher validation
-            var productIds = cartItems.Select(c => c.ProductId).ToList();
-
-            // Validate the voucher
-            var (isValid, validationMessage, calculatedDiscountAmount, voucher) =
-                await _voucherService.ValidateVoucherForOrder(
-                    request.VoucherCode,
-                    userId.Value,
-                    productTotal,
-                    restaurantId,
-                    productIds);
-
-            if (!isValid)
-            {
-                _logger.LogWarning("Voucher validation failed: {Message}", validationMessage);
-                return BadRequest(new { success = false, message = validationMessage });
-            }
-
-            appliedVoucher = voucher;
-            discountAmount = calculatedDiscountAmount;
-
-            _logger.LogInformation("Voucher applied successfully. Discount: {DiscountAmount}", discountAmount);
-
-            // Update voucher usage (will be saved with the order transaction)
-            if (appliedVoucher.UsageLimit.HasValue)
-            {
-                appliedVoucher.UsageLimit--;
-                _context.Vouchers.Update(appliedVoucher);
-            }
-        }
-
-        decimal totalAmount = productTotal + shippingFee - discountAmount;
-        if (totalAmount < 0) totalAmount = 0;
-
-        _logger.LogInformation("Thông tin đơn hàng: Tổng tiền hàng={ProductTotal}, Phí ship={ShippingFee}, Giảm giá={DiscountAmount}, Tổng thanh toán={TotalAmount}",
-            productTotal, shippingFee, discountAmount, totalAmount);
-
-        // 11. Tạo đơn hàng
-        var order = new Order
-        {
-            UserId = userId.Value,
-            RestaurantId = restaurantId,
-            Status = "Pending",
-            OrderDate = DateTime.UtcNow,
-            TotalAmount = totalAmount,
-            Address = deliveryAddress,
-            Latitude = (decimal)orderLat,
-            Longitude = (decimal)orderLng,
-            PaymentMethod = request.PaymentMethod,
-            PaymentStatus = "Unpaid", // Mặc định là Unpaid, sẽ cập nhật khi thanh toán thành công
-            DistanceKm = (decimal)distanceKm.Value,
-            DiscountAmount = discountAmount,
-            ShipFee = shippingFee
-        };
-
-        _context.Orders.Add(order);
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Đã tạo đơn hàng: OrderId={OrderId}", order.OrderId);
-
-        // 12. Tạo chi tiết đơn hàng
-        var orderDetails = new List<object>();
-        foreach (var item in cartItems)
-        {
-            _context.OrderDetails.Add(new OrderDetail
-            {
-                OrderId = order.OrderId,
-                ProductId = item.ProductId,
-                Quantity = item.Quantity,
-                Price = item.Product.Price
-            });
-
-            orderDetails.Add(new
-            {
-                ProductId = item.ProductId,
-                ProductName = item.Product.Name,
-                Quantity = item.Quantity,
-                Price = item.Product.Price
-            });
-        }
-
-        // 13. Xóa giỏ hàng
-        _context.CartItems.RemoveRange(cartItems);
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Đã xóa các sản phẩm đã chọn khỏi giỏ hàng");
-        var orderWithDetails = await _context.Orders
-           .Include(o => o.OrderDetails)
-           .ThenInclude(od => od.Product)
-           .FirstOrDefaultAsync(o => o.OrderId == order.OrderId);
-
-
-        // 14. Xử lý thanh toán VNPay nếu được chọn
-        if (request.PaymentMethod == "VNPay")
-        {
-            _logger.LogInformation("Bắt đầu xử lý thanh toán VNPay cho đơn hàng {OrderId}", order.OrderId);
-
-            try
-            {
-                // Đặt trạng thái thanh toán là Pending ngay khi tạo đơn
-                order.PaymentStatus = "Pending";
-                order.Status = "Pending";
-                await _context.SaveChangesAsync();
-
-                var returnUrl = _configuration["Vnpay:ReturnUrl"];
-                if (string.IsNullOrEmpty(returnUrl))
+                if (!string.IsNullOrEmpty(request.Address))
                 {
-                    _logger.LogError("Thiếu cấu hình ReturnUrl cho VNPay");
-                    return StatusCode(500, new
+                    // 2.1 Sử dụng địa chỉ từ request
+                    deliveryAddress = request.Address;
+                    _logger.LogInformation("Sử dụng địa chỉ từ request: {Address}", deliveryAddress);
+
+                    // Lấy tọa độ từ địa chỉ
+                    try
+                    {
+                        (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+                        _logger.LogInformation("Đã lấy tọa độ từ địa chỉ: {Lat}, {Lng}", orderLat, orderLng);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
+                        return BadRequest(new { success = false, message = "Không thể xác định vị trí từ địa chỉ đã nhập. Vui lòng kiểm tra lại địa chỉ." });
+                    }
+                }
+                else if (request.Latitude.HasValue && request.Longitude.HasValue)
+                {
+                    // 2.2 Sử dụng tọa độ từ request
+                    orderLat = request.Latitude.Value;
+                    orderLng = request.Longitude.Value;
+
+                    // Lấy địa chỉ từ tọa độ
+                    try
+                    {
+                        deliveryAddress = await _mapService.GetAddressFromCoordinates(orderLat, orderLng);
+                        _logger.LogInformation("Đã lấy địa chỉ từ tọa độ: {Address}", deliveryAddress);
+
+                        // Lưu địa chỉ này vào thông tin người dùng
+                        user.Address = deliveryAddress;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Đã cập nhật địa chỉ người dùng trong database");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Không thể lấy địa chỉ từ tọa độ: {Lat}, {Lng}", orderLat, orderLng);
+                        return BadRequest(new { success = false, message = "Không thể xác định địa chỉ từ vị trí hiện tại. Vui lòng nhập địa chỉ thủ công." });
+                    }
+                }
+                else if (!string.IsNullOrEmpty(user.Address))
+                {
+                    // 2.3 Sử dụng địa chỉ từ database
+                    deliveryAddress = user.Address;
+
+                    // Kiểm tra nếu có tọa độ trong database
+                    if (!string.IsNullOrEmpty(user.Address))
+                    {
+                        (orderLat, orderLng) = await _mapService.GetCoordinates(user.Address);
+                        _logger.LogInformation("Sử dụng tọa độ từ database: {Lat}, {Lng}", orderLat, orderLng);
+                    }
+                    else
+                    {
+                        // Nếu không có tọa độ, lấy tọa độ từ địa chỉ
+                        try
+                        {
+                            (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+                            _logger.LogInformation("Đã lấy tọa độ từ địa chỉ database: {Lat}, {Lng}", orderLat, orderLng);
+
+                            // Cập nhật tọa độ vào database
+                            await _context.SaveChangesAsync();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ database: {Address}", deliveryAddress);
+                            return BadRequest(new { success = false, message = "Không thể xác định vị trí từ địa chỉ của bạn. Vui lòng nhập địa chỉ mới." });
+                        }
+                    }
+                }
+                else
+                {
+                    // 2.4 Không có địa chỉ, yêu cầu người dùng nhập
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Thiếu địa chỉ giao hàng");
+                    return BadRequest(new
                     {
                         success = false,
-                        message = "Có lỗi xảy ra khi xử lý thanh toán VNPay. Vui lòng thử lại sau."
+                        requireAddress = true,
+                        message = "Vui lòng cung cấp địa chỉ giao hàng hoặc cho phép truy cập vị trí hiện tại."
                     });
                 }
 
-                var paymentRequest = new PaymentRequest
+                // 3. Kiểm tra giỏ hàng
+                if (request.SelectedCartItems == null || !request.SelectedCartItems.Any())
                 {
-                    OrderId = order.OrderId.ToString(),
-                    Amount = (long)(order.TotalAmount * 100), // VNPay yêu cầu amount theo VND
-                    OrderDescription = $"Thanh toan don hang #{order.OrderId}",
-                    CustomerName = RemoveDiacritics(user.FullName ?? "Khach hang").ToUpper(),
-                    ReturnUrl = returnUrl
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không có sản phẩm được chọn");
+                    return BadRequest(new { success = false, message = "Vui lòng chọn ít nhất một sản phẩm để đặt hàng." });
+                }
+
+                var cartItems = await _context.CartItems
+                    .Where(c => c.UserId == userId && request.SelectedCartItems.Contains(c.CartItemId))
+                    .Include(c => c.Product)
+                    .ThenInclude(p => p.Restaurant)
+                    .ToListAsync();
+
+                if (!cartItems.Any())
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Không tìm thấy sản phẩm đã chọn");
+                    return BadRequest(new { success = false, message = "Không tìm thấy sản phẩm đã chọn hoặc giỏ hàng trống." });
+                }
+
+                // 4. Kiểm tra món ăn từ nhiều nhà hàng
+                var distinctRestaurantIds = cartItems.Select(c => c.Product.RestaurantId).Distinct().ToList();
+                if (distinctRestaurantIds.Count > 1)
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Sản phẩm từ nhiều nhà hàng khác nhau");
+                    return BadRequest(new { success = false, message = "Bạn không thể chọn món ăn từ nhiều nhà hàng khác nhau trong cùng một đơn hàng." });
+                }
+
+                // 5. Lấy thông tin nhà hàng và kiểm tra nếu người dùng đặt hàng từ nhà hàng của chính họ
+                var restaurantId = distinctRestaurantIds.First();
+                var restaurant = cartItems.First().Product.Restaurant;
+
+                // Kiểm tra nếu người dùng là chủ nhà hàng (seller)
+                if (restaurant.SellerId == userId)
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: Người dùng không thể đặt hàng từ nhà hàng của chính mình");
+                    return BadRequest(new { success = false, message = "Bạn không thể đặt hàng từ nhà hàng của chính mình." });
+                }
+
+                double restaurantLat = (double)restaurant.Latitude;
+                double restaurantLng = (double)restaurant.Longitude;
+
+                // 6. Lấy tọa độ địa chỉ giao hàng
+                try
+                {
+                    _logger.LogInformation("Đang lấy tọa độ từ địa chỉ: {Address}", deliveryAddress);
+                    (orderLat, orderLng) = await _mapService.GetCoordinates(deliveryAddress);
+                    _logger.LogInformation("Đã lấy tọa độ thành công: {Lat}, {Lng}", orderLat, orderLng);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Không thể lấy tọa độ từ địa chỉ giao hàng: {Address}", deliveryAddress);
+                    return BadRequest(new { success = false, message = $"Không thể xác định vị trí địa chỉ giao hàng. Vui lòng kiểm tra lại địa chỉ." });
+                }
+
+                // 7. Tính khoảng cách và phí vận chuyển
+                double? distanceKm;
+                try
+                {
+                    _logger.LogInformation("Đang tính khoảng cách giữa nhà hàng và địa chỉ giao hàng");
+                    distanceKm = await _mapService.CalculateDistanceAsync(restaurantLat, restaurantLng, orderLat, orderLng);
+                    if (distanceKm == null)
+                    {
+                        _logger.LogWarning("Không thể tính khoảng cách đường đi");
+                        return BadRequest(new { success = false, message = "Không thể tính khoảng cách đường đi. Vui lòng thử lại sau." });
+                    }
+                    _logger.LogInformation("Khoảng cách: {Distance} km", distanceKm);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi khi tính khoảng cách đường đi");
+                    return BadRequest(new { success = false, message = "Không thể tính khoảng cách đường đi. Vui lòng thử lại sau." });
+                }
+
+                // 8. Tính toán phí vận chuyển với logic mới
+                var (shippingFee, isValidShipping, shippingErrorMessage) = CalculateShippingFee(distanceKm.Value, cartItems);
+
+                // Kiểm tra nếu đơn hàng không hợp lệ dựa trên số lượng sản phẩm
+                if (!isValidShipping)
+                {
+                    _logger.LogWarning("Yêu cầu tạo đơn hàng bị từ chối: {Message}", shippingErrorMessage);
+                    return BadRequest(new { success = false, message = shippingErrorMessage });
+                }
+
+                // 9. Tính toán giá trị đơn hàng
+                decimal productTotal = cartItems.Sum(c => c.Quantity * c.Product.Price);
+                decimal discountAmount = 0;
+                Voucher? appliedVoucher = null;
+
+                // 10. Xử lý voucher nếu có
+                if (!string.IsNullOrEmpty(request.VoucherCode))
+                {
+                    _logger.LogInformation("Processing voucher: {VoucherCode}", request.VoucherCode);
+
+                    // Get product IDs for voucher validation
+                    var productIds = cartItems.Select(c => c.ProductId).ToList();
+
+                    // Validate the voucher
+                    var (isValid, validationMessage, calculatedDiscountAmount, voucher) =
+                        await _voucherService.ValidateVoucherForOrder(
+                            request.VoucherCode,
+                            userId.Value,
+                            productTotal,
+                            restaurantId,
+                            productIds);
+
+                    if (!isValid)
+                    {
+                        _logger.LogWarning("Voucher validation failed: {Message}", validationMessage);
+                        return BadRequest(new { success = false, message = validationMessage });
+                    }
+
+                    appliedVoucher = voucher;
+                    discountAmount = calculatedDiscountAmount;
+
+                    _logger.LogInformation("Voucher applied successfully. Discount: {DiscountAmount}", discountAmount);
+
+                    // Update voucher usage (will be saved with the order transaction)
+                    if (appliedVoucher.UsageLimit.HasValue)
+                    {
+                        appliedVoucher.UsageLimit--;
+                        _context.Vouchers.Update(appliedVoucher);
+                    }
+                }
+
+                decimal totalAmount = productTotal + shippingFee - discountAmount;
+                if (totalAmount < 0) totalAmount = 0;
+
+                _logger.LogInformation("Thông tin đơn hàng: Tổng tiền hàng={ProductTotal}, Phí ship={ShippingFee}, Giảm giá={DiscountAmount}, Tổng thanh toán={TotalAmount}",
+                    productTotal, shippingFee, discountAmount, totalAmount);
+
+                // 11. Tạo đơn hàng
+                var order = new Order
+                {
+                    UserId = userId.Value,
+                    RestaurantId = restaurantId,
+                    Status = "Pending",
+                    OrderDate = DateTime.UtcNow,
+                    TotalAmount = totalAmount,
+                    Address = deliveryAddress,
+                    Latitude = (decimal)orderLat,
+                    Longitude = (decimal)orderLng,
+                    PaymentMethod = request.PaymentMethod,
+                    PaymentStatus = "Unpaid", // Mặc định là Unpaid, sẽ cập nhật khi thanh toán thành công
+                    DistanceKm = (decimal)distanceKm.Value,
+                    DiscountAmount = discountAmount,
+                    ShipFee = shippingFee
                 };
 
-                var paymentUrl = _vnPayService.CreatePaymentUrl(paymentRequest, HttpContext);
+                _context.Orders.Add(order);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Đã tạo đơn hàng: OrderId={OrderId}", order.OrderId);
 
-                // Lưu thông tin đơn hàng tạm thời vào session
-                HttpContext.Session.SetString($"Order_{order.OrderId}", System.Text.Json.JsonSerializer.Serialize(new
+                // 12. Tạo chi tiết đơn hàng
+                var orderDetails = new List<object>();
+                foreach (var item in cartItems)
                 {
-                    OrderId = order.OrderId,
-                    CreatedDate = DateTime.UtcNow,
-                    PaymentMethod = "VNPay"
-                }));
+                    _context.OrderDetails.Add(new OrderDetail
+                    {
+                        OrderId = order.OrderId,
+                        ProductId = item.ProductId,
+                        Quantity = item.Quantity,
+                        Price = item.Product.Price
+                    });
 
+                    orderDetails.Add(new
+                    {
+                        ProductId = item.ProductId,
+                        ProductName = item.Product.Name,
+                        Quantity = item.Quantity,
+                        Price = item.Product.Price
+                    });
+                }
+
+                // 13. Xóa giỏ hàng
+                _context.CartItems.RemoveRange(cartItems);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Đã xóa các sản phẩm đã chọn khỏi giỏ hàng");
+                var orderWithDetails = await _context.Orders
+                   .Include(o => o.OrderDetails)
+                   .ThenInclude(od => od.Product)
+                   .FirstOrDefaultAsync(o => o.OrderId == order.OrderId);
+
+
+                // 14. Xử lý thanh toán VNPay nếu được chọn
+                if (request.PaymentMethod == "VNPay")
+                {
+                    _logger.LogInformation("Bắt đầu xử lý thanh toán VNPay cho đơn hàng {OrderId}", order.OrderId);
+
+                    try
+                    {
+                        // Đặt trạng thái thanh toán là Pending ngay khi tạo đơn
+                        order.PaymentStatus = "Pending";
+                        order.Status = "Pending";
+                        await _context.SaveChangesAsync();
+
+                        var returnUrl = _configuration["Vnpay:ReturnUrl"];
+                        if (string.IsNullOrEmpty(returnUrl))
+                        {
+                            _logger.LogError("Thiếu cấu hình ReturnUrl cho VNPay");
+                            return StatusCode(500, new
+                            {
+                                success = false,
+                                message = "Có lỗi xảy ra khi xử lý thanh toán VNPay. Vui lòng thử lại sau."
+                            });
+                        }
+
+                        var paymentRequest = new PaymentRequest
+                        {
+                            OrderId = order.OrderId.ToString(),
+                            Amount = (long)(order.TotalAmount * 100), // VNPay yêu cầu amount theo VND
+                            OrderDescription = $"Thanh toan don hang #{order.OrderId}",
+                            CustomerName = RemoveDiacritics(user.FullName ?? "Khach hang").ToUpper(),
+                            ReturnUrl = returnUrl
+                        };
+
+                        var paymentUrl = _vnPayService.CreatePaymentUrl(paymentRequest, HttpContext);
+
+                        // Lưu thông tin đơn hàng tạm thời vào session
+                        HttpContext.Session.SetString($"Order_{order.OrderId}", System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            OrderId = order.OrderId,
+                            CreatedDate = DateTime.UtcNow,
+                            PaymentMethod = "VNPay"
+                        }));
+
+                        return Ok(new
+                        {
+                            success = true,
+                            message = "Redirect to VNPay",
+                            paymentUrl,
+                            orderId = order.OrderId,
+                            paymentMethod = "VNPay"
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        // Rollback trạng thái nếu có lỗi
+                        order.PaymentStatus = "Failed";
+                        await _context.SaveChangesAsync();
+
+                        _logger.LogError(ex, "Lỗi khi xử lý thanh toán VNPay");
+                        return StatusCode(500, new
+                        {
+                            success = false,
+                            message = "Có lỗi xảy ra khi xử lý thanh toán VNPay. Vui lòng thử lại sau."
+                        });
+                    }
+                }
+
+                // 15. Trả về kết quả cho các phương thức thanh toán khác
                 return Ok(new
                 {
                     success = true,
-                    message = "Redirect to VNPay",
-                    paymentUrl,
+                    message = "Đơn hàng đã được tạo thành công.",
                     orderId = order.OrderId,
-                    paymentMethod = "VNPay"
+                    totalAmount,
+                    shippingFee,
+                    discountAmount,
+                    paymentMethod = request.PaymentMethod,
+                    orderDetails
                 });
             }
             catch (Exception ex)
             {
-                // Rollback trạng thái nếu có lỗi
-                order.PaymentStatus = "Failed";
-                await _context.SaveChangesAsync();
-
-                _logger.LogError(ex, "Lỗi khi xử lý thanh toán VNPay");
+                _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu tạo đơn hàng");
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "Có lỗi xảy ra khi xử lý thanh toán VNPay. Vui lòng thử lại sau."
+                    message = "Có lỗi xảy ra khi xử lý đơn hàng của bạn. Vui lòng thử lại sau."
                 });
             }
         }
-
-        // 15. Trả về kết quả cho các phương thức thanh toán khác
-        return Ok(new
-        {
-            success = true,
-            message = "Đơn hàng đã được tạo thành công.",
-            orderId = order.OrderId,
-            totalAmount,
-            shippingFee,
-            discountAmount,
-            paymentMethod = request.PaymentMethod,
-            orderDetails
-        });
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Lỗi không xác định khi xử lý yêu cầu tạo đơn hàng");
-        return StatusCode(500, new
-        {
-            success = false,
-            message = "Có lỗi xảy ra khi xử lý đơn hàng của bạn. Vui lòng thử lại sau."
-        });
-    }
-}
-
 
 
 
@@ -594,86 +593,45 @@ public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest reque
         {
             try
             {
-                // Log tất cả tham số từ VNPay
-                foreach (var key in HttpContext.Request.Query.Keys)
-                {
-                    _logger.LogInformation($"VNPay callback: {key}={HttpContext.Request.Query[key]}");
-                }
-
                 var response = _vnPayService.PaymentExecute(HttpContext.Request.Query);
                 var orderId = int.Parse(response.OrderId);
 
-                _logger.LogInformation($"VNPay callback for order {orderId}: Success={response.Success}, ResponseCode={response.VnPayResponseCode}");
-
-                // Kiểm tra đơn hàng
                 var order = await _context.Orders.FindAsync(orderId);
                 if (order == null)
                 {
-                    _logger.LogError("Order not found: {OrderId}", orderId);
                     return Redirect($"{_configuration["ClientUrl"]}/payment/failed?message=Order not found");
                 }
 
-                // Chỉ xử lý nếu đơn hàng đang ở trạng thái Pending
-                if (order.PaymentStatus != "Pending")
+                // Only process if payment is still pending
+                if (order.PaymentStatus == "Pending")
                 {
-                    _logger.LogWarning("Order {OrderId} already processed. Current status: {Status}",
-                        orderId, order.PaymentStatus);
+                    var vnpResponseCode = HttpContext.Request.Query["vnp_ResponseCode"].ToString();
 
-                    if (order.PaymentStatus == "Paid")
-                        return Redirect($"{_configuration["ClientUrl"]}/payment/success?orderId={orderId}");
-                    else
-                        return Redirect($"{_configuration["ClientUrl"]}/payment/failed?orderId={orderId}");
-                }
-
-                // Kiểm tra mã phản hồi của VNPay một cách rõ ràng
-                var vnpResponseCode = HttpContext.Request.Query["vnp_ResponseCode"].ToString();
-
-                // Mã "00" là thanh toán thành công
-                if (response.Success && vnpResponseCode == "00")
-                {
-                    // Cập nhật thông tin thanh toán thành công
-                    order.PaymentStatus = "Paid";
-                    order.PaymentDate = DateTime.UtcNow;
-                    order.TransactionId = response.TransactionId;
-
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("Payment successful for order {OrderId}", orderId);
-
-                    return Redirect($"{_configuration["ClientUrl"]}/payment/success?orderId={orderId}");
-                }
-                else
-                {
-                    // Ghi rõ lý do thất bại
-                    string failureReason = vnpResponseCode switch
+                    if (response.Success && vnpResponseCode == "00")
                     {
-                        "01" => "Giao dịch đã tồn tại",
-                        "02" => "Merchant không hợp lệ",
-                        "03" => "Dữ liệu gửi sang không đúng định dạng",
-                        "04" => "Khởi tạo GD không thành công do Website đang bị tạm khóa",
-                        "05" => "Giao dịch không thành công do: Quý khách nhập sai mật khẩu thanh toán quá số lần quy định",
-                        "06" => "Giao dịch không thành công do Quý khách nhập sai mật khẩu thanh toán",
-                        "07" => "Trừ tiền thành công. Giao dịch bị nghi ngờ",
-                        "09" => "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng chưa đăng ký dịch vụ InternetBanking",
-                        "10" => "Giao dịch không thành công do: Khách hàng xác thực thông tin thẻ/tài khoản không đúng quá 3 lần",
-                        "11" => "Giao dịch không thành công do: Đã hết hạn chờ thanh toán",
-                        "12" => "Giao dịch không thành công do: Thẻ/Tài khoản của khách hàng bị khóa",
-                        "24" => "Giao dịch không thành công do: Khách hàng hủy giao dịch",
-                        "51" => "Giao dịch không thành công do: Tài khoản của quý khách không đủ số dư để thực hiện giao dịch",
-                        "65" => "Giao dịch không thành công do: Tài khoản của Quý khách đã vượt quá hạn mức giao dịch trong ngày",
-                        "75" => "Ngân hàng thanh toán đang bảo trì",
-                        "79" => "Giao dịch không thành công do: KH nhập sai mật khẩu thanh toán quá số lần quy định",
-                        "99" => "Người dùng hủy giao dịch",
-                        _ => $"Giao dịch thất bại với mã lỗi: {vnpResponseCode}"
-                    };
+                        // Update all payment fields in a single transaction
+                        order.PaymentStatus = "Paid";
+                        order.PaymentDate = DateTime.UtcNow;
+                        order.TransactionId = response.TransactionId;
+                        order.Status = "Processing";
 
-                    // Đánh dấu là thanh toán thất bại
-                    order.PaymentStatus = "Failed";
-                    await _context.SaveChangesAsync();
+                        await _context.SaveChangesAsync();
 
-                    _logger.LogWarning("Payment failed for order {OrderId}. Reason: {Reason}", orderId, failureReason);
+                        return Redirect($"{_configuration["ClientUrl"]}/payment/success?orderId={orderId}");
+                    }
+                    else
+                    {
+                        order.PaymentStatus = "Failed";
+                        await _context.SaveChangesAsync();
 
-                    return Redirect($"{_configuration["ClientUrl"]}/payment/failed?orderId={orderId}&message={WebUtility.UrlEncode(failureReason)}");
+                        return Redirect($"{_configuration["ClientUrl"]}/payment/failed?orderId={orderId}");
+                    }
                 }
+
+                // If already processed, redirect appropriately
+                return order.PaymentStatus == "Paid"
+                    ? Redirect($"{_configuration["ClientUrl"]}/payment/success?orderId={orderId}")
+                    : Redirect($"{_configuration["ClientUrl"]}/payment/failed?orderId={orderId}");
             }
             catch (Exception ex)
             {
@@ -681,6 +639,9 @@ public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest reque
                 return Redirect($"{_configuration["ClientUrl"]}/payment/failed?message=System error");
             }
         }
+
+        // Remove the PaymentSuccess endpoint entirely - let callback handle all updates
+
         [HttpGet("payment-success")]
         public async Task<IActionResult> PaymentSuccess(long orderId, string vnp_ResponseCode, string vnp_TransactionNo)
         {
@@ -690,17 +651,20 @@ public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest reque
                 var order = await _context.Orders.FindAsync(orderId);
                 if (order == null)
                 {
-                    // Chuyển hướng về front-end với thông báo lỗi
-                    return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString($"Không tìm thấy đơn hàng #{orderId}")}");
+                    return RedirectToAction("PaymentFailed", new
+                    {
+                        message = $"Không tìm thấy đơn hàng #{orderId}"
+                    });
                 }
-
                 // 2. Kiểm tra mã phản hồi từ VNPay
                 if (vnp_ResponseCode != "00") // 00 là mã thành công
                 {
-                    // Chuyển hướng về front-end với thông báo lỗi
-                    return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString($"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}")}&orderId={orderId}");
+                    return RedirectToAction("PaymentFailed", new
+                    {
+                        message = $"Thanh toán không thành công. Mã lỗi: {vnp_ResponseCode}",
+                        orderId = orderId
+                    });
                 }
-
                 // 3. Cập nhật trạng thái đơn hàng nếu chưa cập nhật
                 if (order.PaymentStatus != "Paid")
                 {
@@ -708,19 +672,31 @@ public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest reque
                     order.TransactionId = vnp_TransactionNo;
                     order.PaymentDate = DateTime.UtcNow;
                     order.Status = "Processing"; // Chuyển sang trạng thái đang xử lý
+
                     await _context.SaveChangesAsync();
 
                     // Gửi thông báo/email xác nhận
-                    // TODO: Implement notification/email logic here
-                }
 
-                // 4. Chuyển hướng về front-end với thông báo thành công
-                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=true&orderId={orderId}&amount={order.TotalAmount}&transactionId={vnp_TransactionNo}&message={Uri.EscapeDataString("Thanh toán thành công. Đơn hàng đang được xử lý.")}");
+                }
+                // 4. Trả về kết quả thành công
+                return Ok(new PaymentResultViewModel
+                {
+                    Success = true,
+                    OrderId = orderId,
+                    Amount = order.TotalAmount,
+                    TransactionId = vnp_TransactionNo,
+                    PaymentDate = DateTime.UtcNow,
+                    Message = "Thanh toán thành công. Đơn hàng đang được xử lý."
+                });
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Lỗi khi xử lý kết quả thanh toán thành công cho đơn hàng {orderId}");
-                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString("Đã xảy ra lỗi khi xử lý kết quả thanh toán")}&orderId={orderId}");
+                return BadRequest(new
+                {
+                    message = "Đã xảy ra lỗi khi xử lý kết quả thanh toán",
+                    orderId = orderId
+                });
             }
         }
 
@@ -729,31 +705,38 @@ public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest reque
         {
             try
             {
+                PaymentResultViewModel model = new()
+                {
+                    Success = false,
+                    Message = message
+                };
                 // Nếu có orderId, thêm thông tin đơn hàng
                 if (orderId.HasValue)
                 {
                     var order = await _context.Orders.FindAsync(orderId.Value);
                     if (order != null)
                     {
+                        model.OrderId = order.OrderId;
+                        model.Amount = order.TotalAmount;
+
                         // Cập nhật trạng thái nếu cần
                         if (order.PaymentStatus != "Failed")
                         {
                             order.PaymentStatus = "Failed";
                             await _context.SaveChangesAsync();
                         }
-
-                        // Chuyển hướng về front-end với thông tin đơn hàng
-                        return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString(message)}&orderId={orderId}&amount={order.TotalAmount}");
                     }
                 }
-
-                // Chuyển hướng về front-end chỉ với thông báo
-                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString(message)}");
+                return Ok(model);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Lỗi khi xử lý trang thanh toán thất bại. OrderId: {orderId}");
-                return Redirect($"{_configuration["ClientApp:BaseUrl"]}/payment-result?success=false&message={Uri.EscapeDataString("Đã xảy ra lỗi hệ thống. Vui lòng liên hệ hỗ trợ.")}");
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = "Đã xảy ra lỗi hệ thống. Vui lòng liên hệ hỗ trợ."
+                });
             }
         }
 

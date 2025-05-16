@@ -14,7 +14,7 @@ namespace KhoaLuan1.Controllers
         private readonly KhoaluantestContext _context;
         private readonly HttpClient _httpClient;
         private readonly MapService _mapService;
-        private const string ApiKey = "lvk0JwNwaf0IZdBqZeDZZS0YUfAsFl2prXSWVDkb"; // Thay bằng API Key của bạn
+        private const string ApiKey = "xyz"; // Thay bằng API Key của bạn
 
         public GoongController(KhoaluantestContext context,MapService mapService)
         {

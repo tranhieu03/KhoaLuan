@@ -12,7 +12,7 @@ namespace KhoaLuan1.Service
         private readonly HttpClient _httpClient;
         private readonly ILogger<MapService> _logger;
         private readonly KhoaluantestContext _context;
-        private const string GoongApiKey = "lvk0JwNwaf0IZdBqZeDZZS0YUfAsFl2prXSWVDkb"; // Thay bằng API Key của bạn
+        private const string GoongApiKey = "xyz"; // Thay bằng API Key của bạn
 
         public MapService(HttpClient httpClient, KhoaluantestContext context, ILogger<MapService> logger)
         {
