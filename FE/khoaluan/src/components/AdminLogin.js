@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { LogIn } from "lucide-react";
-
+import API_BASE_URL from "../config";
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,12 +17,12 @@ const AdminLogin = () => {
 
     try {
       const response = await axios.post(
-        "https://localhost:44308/api/Auth/login",
+        `${API_BASE_URL}/Auth/login`,
         { email, password },
         { withCredentials: true }
       );
       const response2 = await axios.get(
-        "https://localhost:44308/api/Auth/status",
+        `${API_BASE_URL}/Auth/status`,
         { withCredentials: true }
       );
       if (response2.data.role !== "Admin") {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import AdminHeader from './AdminHeader';
+import API_BASE_URL from "../config";
 import { 
   Ticket, 
   Plus, 
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react';
 import format from 'date-fns/format';
 
-const API_URL = 'https://localhost:44308/api/Admin';
+const API_URL = `${API_BASE_URL}/Admin`;
 
 const VoucherManagement = () => {
   // State variables

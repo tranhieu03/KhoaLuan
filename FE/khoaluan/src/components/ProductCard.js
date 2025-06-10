@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import axios from "axios";
 import { useState } from "react";
+import API_BASE_URL from "../config";
 
 const ProductCard = ({ product, onViewDetail, onCartUpdate }) => {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ const ProductCard = ({ product, onViewDetail, onCartUpdate }) => {
       return imageUrl;
     } else {
       // For local uploads, prepend the base URL if needed
-      return `https://localhost:44308${imageUrl}`;
+      return `${API_BASE_URL}}${imageUrl}`;
     }
   };
 
@@ -44,7 +45,7 @@ const ProductCard = ({ product, onViewDetail, onCartUpdate }) => {
     try {
       setIsAdding(true);
       await axios.post(
-        "https://localhost:44308/api/Cart/Cart_add",
+        `${API_BASE_URL}//Cart/Cart_add`,
         { 
           ProductId: product.productId, 
           Quantity: 1 

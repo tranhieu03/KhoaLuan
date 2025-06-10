@@ -1,5 +1,6 @@
 import React from 'react';
 import { CheckCircle, Clock } from 'lucide-react';
+import API_BASE_URL from "../config";
 
 const OrderStatusStepper = ({ currentStatus, orderDate, estimatedDelivery }) => {
   const statuses = [

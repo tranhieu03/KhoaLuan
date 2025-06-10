@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import * as signalR from '@microsoft/signalr';
+import API_BASE_URL from "../config";
 
 // Cấu hình mặc định cho Axios để gửi credentials
 axios.defaults.withCredentials = true;
@@ -62,7 +63,7 @@ const DeliveryPersonDashboard = () => {
   const fetchAvailableOrders = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://localhost:44308/api/Delivery/available-orders');
+      const response = await axios.get(`${API_BASE_URL}/Delivery/available-orders`);
       if (response.data.success) {
         setAvailableOrders(response.data.orders);
       }
@@ -79,7 +80,7 @@ const DeliveryPersonDashboard = () => {
     try {
       setLoading(true);
       const userId = sessionStorage.getItem("userId");
-      const response = await axios.get('https://localhost:44308/api/Delivery/my-orders', {
+      const response = await axios.get(`${API_BASE_URL}/Delivery/my-orders`, {
         headers: {
           'X-User-Id': userId // Gửi userId trong header nếu backend yêu cầu
         }
@@ -105,7 +106,7 @@ const DeliveryPersonDashboard = () => {
   const handleAcceptDelivery = async (orderId) => {
     try {
       const userId = sessionStorage.getItem("userId");
-      const response = await axios.post(`https://localhost:44308/api/Order/accept-delivery/${orderId}`, null, {
+      const response = await axios.post(`${API_BASE_URL}/Order/accept-delivery/${orderId}`, null, {
         headers: {
           'X-User-Id': userId
         }
@@ -126,7 +127,7 @@ const DeliveryPersonDashboard = () => {
     try {
       const userId = sessionStorage.getItem("userId");
       const response = await axios.post(
-        `https://localhost:44308/api/Order/confirm-delivery/${orderId}`, // Loại bỏ dấu // thừa
+        `${API_BASE_URL}/Order/confirm-delivery/${orderId}`, // Loại bỏ dấu // thừa
         null,
         {
           headers: {

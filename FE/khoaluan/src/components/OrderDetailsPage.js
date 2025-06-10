@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import OrderChat from './OrderChat';
+import API_BASE_URL from "../config";
 import { 
   ChevronLeft, 
   Clock, 
@@ -37,7 +38,7 @@ const OrderDetailsPage = () => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `https://localhost:44308/api/Order/order-details/${orderId}`,
+        `${API_BASE_URL}/Order/order-details/${orderId}`,
         { withCredentials: true }
       );
       

@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_BASE_URL from "../config";
 
-const API_URL = "https://localhost:44308/api/Cart";
+const API_URL = `${API_BASE_URL}/Cart`;
 axios.defaults.withCredentials = true; // Gửi cookie session
 
 export const addToCart = async (productId, quantity) => {
@@ -20,12 +21,12 @@ export const addToCart = async (productId, quantity) => {
     return response.data;
   };
   // export const createOrder = async (orderData) => {
-  //   const response = await axios.post("https://localhost:44308/api/Order/create-order", orderData);
+  //   const response = await axios.post(`${API_BASE_URL}/Order/create-order", orderData);
   //   return response.data;
   // };
   export const createOrder = async (orderData) => {
     try {
-      const response = await axios.post("https://localhost:44308/api/Order/create-order", orderData, {
+      const response = await axios.post(`${API_BASE_URL}/Order/create-order`, orderData, {
         withCredentials: true, // Gửi session cookie (nếu cần)
       });
   

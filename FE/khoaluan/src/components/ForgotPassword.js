@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import axios from "axios";
+import API_BASE_URL from "../config";
 
-const API_URL = "https://localhost:44308/api/Auth"; // Đổi URL theo API của bạn
+const API_URL = `${API_BASE_URL}/Auth`; // Đổi URL theo API của bạn
 
 function ForgotPassword() {
   const [email, setEmail] = useState("");

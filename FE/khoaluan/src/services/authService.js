@@ -1,7 +1,8 @@
 // src/services/authService.js
 import axios from "axios";
+import API_BASE_URL from "../config";
 
-const API_URL = "https://localhost:44308/api/Auth"; // Replace with your actual API URL
+const API_URL = `${API_BASE_URL}/Auth`; // Replace with your actual API URL
 
 const axiosInstance = axios.create({
   baseURL: API_URL,

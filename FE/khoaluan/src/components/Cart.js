@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { Trash2, ShoppingCart, Check, MapPin } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Header from "./Header";
+import API_BASE_URL from "../config";
 
 function Cart() {
   const [cartItems, setCartItems] = useState([]);
@@ -23,7 +24,7 @@ function Cart() {
     try {
       setLoading(true);
       const response = await axios.get(
-        "https://localhost:44308/api/Cart/Cart_items",
+        `${API_BASE_URL}/Cart/Cart_items`,
         { withCredentials: true }
       );
       
@@ -59,7 +60,7 @@ function Cart() {
   const handleRemoveItem = async (cartItemId) => {
     try {
       await axios.delete(
-        `https://localhost:44308/api/Cart/remove/${cartItemId}`,
+        `${API_BASE_URL}/Cart/remove/${cartItemId}`,
         { withCredentials: true }
       );
       
@@ -76,7 +77,7 @@ function Cart() {
     
     try {
       await axios.put(
-        `https://localhost:44308/api/Cart/update/${cartItemId}`,
+        `${API_BASE_URL}/Cart/update/${cartItemId}`,
         { Quantity: newQuantity },
         { withCredentials: true }
       );

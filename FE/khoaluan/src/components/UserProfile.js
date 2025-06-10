@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import API_BASE_URL from "../config";
 import { User, Mail, Phone, MapPin, Truck, Loader2, Check } from 'lucide-react';
 import Header from './Header';
 
@@ -21,7 +22,7 @@ const UserProfile = () => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('https://localhost:44308/api/Account/profile', {
+        const response = await axios.get(`${API_BASE_URL}/Account/profile`, {
           withCredentials: true
         });
         
@@ -58,7 +59,7 @@ const UserProfile = () => {
     
     try {
       const response = await axios.put(
-        'https://localhost:44308/api/Account/update-profile',
+        `${API_BASE_URL}/Account/update-profile`,
         {
           fullName: formData.fullName,
           phoneNumber: formData.phoneNumber,

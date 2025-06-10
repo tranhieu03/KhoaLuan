@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { Calendar, ChevronDown, DollarSign, BarChart, ShoppingBag, PieChart, RefreshCw } from "lucide-react";
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart as RePieChart, Pie, Cell } from "recharts";
 import RestaurantHeader from "./RestaurantHeader";
+import API_BASE_URL from "../config";
+
+
 export default function ReportDashboard() {
   const [activeTab, setActiveTab] = useState("revenue");
   const [filterType, setFilterType] = useState("day");
@@ -9,6 +12,7 @@ export default function ReportDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [error, setError] = useState("");
+  
 
   // Data states
   const [revenue, setRevenue] = useState(0);
@@ -16,7 +20,7 @@ export default function ReportDashboard() {
   const [productNames, setProductNames] = useState({});
   const [userRole, setUserRole] = useState(""); 
 
-  const baseUrl = "https://localhost:44308/api";
+  const baseUrl = API_BASE_URL;
 
   // Fetch user role on component mount
   useEffect(() => {

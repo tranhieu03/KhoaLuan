@@ -5,6 +5,7 @@ import axios from "axios";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
 import Header from "./Header";
+import API_BASE_URL from "../config";
 
 const ProductDetailPage = () => {
   const { productId } = useParams();
@@ -17,7 +18,7 @@ const ProductDetailPage = () => {
     const fetchProduct = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`https://localhost:44308/api/Customer/product-detail/${productId}`);
+        const response = await axios.get(`${API_BASE_URL}/Customer/product-detail/${productId}`);
         setProduct(response.data);
         setLoading(false);
       } catch (err) {
@@ -42,7 +43,7 @@ const ProductDetailPage = () => {
       return imageUrl;
     } else {
       // For local uploads, prepend the base URL if needed
-      return `https://localhost:44308${imageUrl}`;
+      return `${API_BASE_URL}${imageUrl}`;
     }
   };
 

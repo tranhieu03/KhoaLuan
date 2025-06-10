@@ -4,6 +4,7 @@ import { MapPin, Phone, Store, Edit, Save, X, RefreshCw } from 'lucide-react';
 import MapComponent from './MapComponent';
 import 'leaflet/dist/leaflet.css';
 import RestaurantHeader from './RestaurantHeader';
+import API_BASE_URL from "../config";
 
 const RestaurantInfo = () => {
   const [restaurant, setRestaurant] = useState(null);
@@ -25,7 +26,7 @@ const RestaurantInfo = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('https://localhost:44308/api/Restaurant/my-restaurant');
+      const response = await axios.get(`${API_BASE_URL}//Restaurant/my-restaurant`);
       setRestaurant(response.data);
       
       // Initialize position from restaurant data
@@ -120,7 +121,7 @@ const RestaurantInfo = () => {
       }
 
       const response = await axios.put(
-        'https://localhost:44308/api/Restaurant/update',
+        `${API_BASE_URL}//Restaurant/update`,
         updateFormData,
         {
           headers: {

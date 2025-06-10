@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_BASE_URL from "../config";
 
-const API_URL = "https://localhost:44308/api/Customer";
+const API_URL = `${API_BASE_URL}/Product`; // Đảm bảo API_BASE_URL được định nghĩa trong config.js
 axios.defaults.withCredentials = true; // Gửi cookie session
 
 export const getAllProducts = async (page, pageSize) => {

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import MapComponent from "./MapComponent";
+import API_BASE_URL from "../config"; // Đảm bảo bạn đã cấu hình đúng API_BASE_URL
 
 const AddressSearch = () => {
   const [address, setAddress] = useState("");
@@ -14,7 +15,7 @@ const AddressSearch = () => {
   // 🟢 Hàm lấy tọa độ từ API Goong
   const fetchCoordinates = async (addr, setCoordFunction) => {
     try {
-      const response = await axios.get(`https://localhost:44308/api/Goong/geocode`, {
+      const response = await axios.get(`${API_BASE_URL}/Goong/geocode`, {
         params: { address: addr },
       });
 
@@ -64,7 +65,7 @@ const AddressSearch = () => {
     }
 
     try {
-      const response = await axios.get(`https://localhost:44308/api/Goong/distance`, {
+      const response = await axios.get(`${API_BASE_URL}/Goong/distance`, {
         params: {
           start: `${coordinates.lat},${coordinates.lon}`,
           end: `${destinationCoords.lat},${destinationCoords.lon}`,

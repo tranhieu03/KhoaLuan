@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import API_BASE_URL from "../config";
 import { 
   Bell, User, LogOut, ChevronDown, Sun, Moon,
   Users, ShoppingBag, FileText, Ticket, Settings
@@ -32,7 +33,7 @@ const AdminHeader = () => {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        const response = await axios.get("https://localhost:44308/api/Auth/status", {
+        const response = await axios.get(`${API_BASE_URL}/Auth/status`, {
           withCredentials: true
         });
         
@@ -72,7 +73,7 @@ const AdminHeader = () => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await axios.get("https://localhost:44308/api/Notifcation/notifications", {
+      const response = await axios.get(`${API_BASE_URL}/Notifcation/notifications`, {
         withCredentials: true
       });
       setNotifications(response.data);
@@ -84,7 +85,7 @@ const AdminHeader = () => {
 
   const markAllAsRead = async () => {
     try {
-      await axios.put("https://localhost:44308/api/Notification/mark-all-read", {}, {
+      await axios.put(`${API_BASE_URL}/Notification/mark-all-read`, {}, {
         withCredentials: true
       });
       setNotifications(notifications.map(notif => ({ ...notif, isRead: true })));
@@ -97,7 +98,7 @@ const AdminHeader = () => {
   const handleNotificationsOpen = async () => {
     if (!isNotificationsOpen && unreadCount > 0) {
       try {
-        await axios.post("https://localhost:44308/api/Admin/mark-notifications-read", {}, {
+        await axios.post(`${API_BASE_URL}/Admin/mark-notifications-read`, {}, {
           withCredentials: true
         });
         fetchNotifications();
@@ -110,7 +111,7 @@ const AdminHeader = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post("https://localhost:44308/api/Auth/logout", {}, {
+      await axios.post(`${API_BASE_URL}/Auth/logout`, {}, {
         withCredentials: true
       });
       setIsLoggedIn(false);

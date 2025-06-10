@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import API_BASE_URL from "../config";
 import { Calendar, ChevronLeft, ChevronRight, BarChart3, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -42,7 +43,7 @@ const DeliveryRevenue = () => {
       setIsLoading(true);
       try {
         const response = await axios.get(
-          `https://localhost:44308/api/Reports/delivery/orders?filterType=${filterType}&date=${selectedDate.toISOString()}`,
+          `${API_BASE_URL}/Reports/delivery/orders?filterType=${filterType}&date=${selectedDate.toISOString()}`,
           { withCredentials: true }
         );
         setOrderStats(response.data);

@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_BASE_URL from "../config";
 
-const API_URL = "https://localhost:44308/api/Product";
+const API_URL = `${API_BASE_URL}/Product`;
 axios.defaults.withCredentials = true; // Đảm bảo gửi cookie session với mọi request
 
 export const create = async (data) => {

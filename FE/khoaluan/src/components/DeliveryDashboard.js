@@ -5,6 +5,7 @@ import * as signalR from '@microsoft/signalr';
 import DeliveryHeader from './DeliveryHeader';
 import { MapPin, CheckCircle, AlertCircle } from 'lucide-react';
 import DeliveryChat from './DeliveryChat';
+import API_BASE_URL from "../config";
 
 const DeliveryPersonDashboard = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
@@ -158,7 +159,7 @@ const DeliveryPersonDashboard = () => {
   // Update delivery location
   const updateDeliveryLocation = async (orderId, location) => {
     try {
-      await axios.post('https://localhost:44308/api/Order/update-delivery-location', {
+      await axios.post(`${API_BASE_URL}/Order/update-delivery-location`, {
         orderId: orderId,
         latitude: location.latitude,
         longitude: location.longitude
@@ -173,7 +174,7 @@ const DeliveryPersonDashboard = () => {
   const fetchAvailableOrders = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://localhost:44308/api/Delivery/available-orders');
+      const response = await axios.get(`${API_BASE_URL}/Delivery/available-orders`);
       if (response.data.success) {
         setAvailableOrders(response.data.orders);
       }
@@ -189,7 +190,7 @@ const DeliveryPersonDashboard = () => {
   const fetchMyOrders = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://localhost:44308/api/Delivery/my-orders');
+      const response = await axios.get(`${API_BASE_URL}/Delivery/my-orders`);
       if (response.data.success) {
         setMyOrders(response.data.orders);
       }
@@ -222,7 +223,7 @@ const DeliveryPersonDashboard = () => {
     }
     
     try {
-      const response = await axios.post(`https://localhost:44308/api/Order/accept-delivery/${orderId}`, {
+      const response = await axios.post(`${API_BASE_URL}/Order/accept-delivery/${orderId}`, {
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude
       });
@@ -256,7 +257,7 @@ const DeliveryPersonDashboard = () => {
     }
     
     try {
-      const response = await axios.post(`https://localhost:44308/api/Order/confirm-delivery/${orderId}`, {
+      const response = await axios.post(`${API_BASE_URL}/Order/confirm-delivery/${orderId}`, {
         latitude: currentLocation.latitude,
         longitude: currentLocation.longitude
       });

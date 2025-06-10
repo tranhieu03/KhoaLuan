@@ -4,6 +4,7 @@ import { CheckCircle, ShoppingCart, Tag, Truck, CreditCard, MapPin, RefreshCw } 
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import Header from './Header';
+import API_BASE_URL from "../config";
 
 const OrderPage = () => {
   const location = useLocation();
@@ -49,7 +50,7 @@ const OrderPage = () => {
     setLoading(true);
     try {
       const response = await axios.get(
-        "https://localhost:44308/api/Cart/Cart_items",
+        `${API_BASE_URL}/Cart/Cart_items`,
         { withCredentials: true }
       );
       
@@ -98,7 +99,7 @@ const OrderPage = () => {
     try {
       setVoucherLoading(true);
       const response = await axios.get(
-        "https://localhost:44308/api/Order/get-valid-vouchers",
+        `${API_BASE_URL}/Order/get-valid-vouchers`,
         { withCredentials: true }
       );
       
@@ -121,7 +122,7 @@ const OrderPage = () => {
     setAddressLoading(true);
     try {
       const response = await axios.get(
-        "https://localhost:44308/api/Order/get-default-address",
+        `${API_BASE_URL}/Order/get-default-address`,
         { withCredentials: true }
       );
       
@@ -159,7 +160,7 @@ const OrderPage = () => {
           try {
             // Send coordinates to get address
             const response = await axios.post(
-              "https://localhost:44308/api/Order/get-user-location",
+              `${API_BASE_URL}/Order/get-user-location`,
               { latitude, longitude },
               { withCredentials: true }
             );
@@ -236,7 +237,7 @@ const OrderPage = () => {
       };
       
       const response = await axios.post(
-        "https://localhost:44308/api/Order/validate-voucher",
+        `${API_BASE_URL}/Order/validate-voucher`,
         requestData,
         { withCredentials: true }
       );
@@ -306,7 +307,7 @@ const OrderPage = () => {
       }
 
       const response = await axios.post(
-        "https://localhost:44308/api/Order/create-order",
+        `${API_BASE_URL}/Order/create-order`,
         orderRequest,
         { withCredentials: true }
       );

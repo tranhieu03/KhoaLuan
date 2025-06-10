@@ -1,6 +1,7 @@
 import React from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import API_BASE_URL from "../config";
 
 const MapComponent = ({ locations = [] }) => {
   console.log("Locations received:", locations); // Debug

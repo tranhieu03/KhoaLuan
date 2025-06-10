@@ -3,6 +3,7 @@ import axios from 'axios';
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 import { MessageCircle, Send, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
+import API_BASE_URL from "../config";
 
 const DeliveryChat = ({ myOrders }) => {
   const [showChat, setShowChat] = useState(false);
@@ -67,7 +68,7 @@ const DeliveryChat = ({ myOrders }) => {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        const response = await axios.get("https://localhost:44308/api/Auth/status", {
+        const response = await axios.get(`${API_BASE_URL}/Auth/status`, {
           withCredentials: true
         });
         
@@ -95,7 +96,7 @@ const DeliveryChat = ({ myOrders }) => {
 
     const fetchParticipants = async () => {
       try {
-        const response = await axios.get(`https://localhost:44308/api/Chat/participants/${selectedOrderId}`);
+        const response = await axios.get(`${API_BASE_URL}/Chat/participants/${selectedOrderId}`);
         setParticipants(response.data);
 
         // Default to the customer as receiver
@@ -125,12 +126,12 @@ const DeliveryChat = ({ myOrders }) => {
     const fetchChatHistory = async () => {
       try {
         setLoading(true);
-        const response = await axios.get(`https://localhost:44308/api/Chat/history/${selectedOrderId}`);
+        const response = await axios.get(`${API_BASE_URL}/Chat/history/${selectedOrderId}`);
         setMessages(response.data);
         setLoading(false);
         
         // Mark messages as read
-        await axios.post(`https://localhost:44308/api/Chat/mark-read/${selectedOrderId}`);
+        await axios.post(`${API_BASE_URL}/Chat/mark-read/${selectedOrderId}`);
       } catch (err) {
         console.error("Error fetching chat history: ", err);
         setError("Không thể tải lịch sử chat. Vui lòng thử lại sau.");
@@ -151,7 +152,7 @@ const DeliveryChat = ({ myOrders }) => {
     if (!newMessage.trim() || !selectedOrderId) return;
 
     try {
-      await axios.post('https://localhost:44308/api/Chat/send', {
+      await axios.post(`${API_BASE_URL}/Chat/send`, {
         orderId: selectedOrderId,
         content: newMessage,
         receiverId: receiverId
