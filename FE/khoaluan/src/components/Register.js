@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { register, verifyOtp, resendOtp } from "../services/authService";
+import API_BASE_URL from "../config";
 
 function Register() {
   const [step, setStep] = useState("register");

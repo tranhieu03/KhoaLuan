@@ -5,6 +5,7 @@ import axios from "axios";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
+import API_BASE_URL from "../config";
 import Footer from "./Footer";
 
 const ProductListingPage = () => {
@@ -44,7 +45,7 @@ const ProductListingPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get("https://localhost:44308/api/Customer/food-categories");
+        const response = await axios.get(`${API_BASE_URL}Customer/food-categories`);
         setFoodCategories(response.data);
       } catch (err) {
         console.error("Failed to fetch categories:", err);
@@ -122,7 +123,7 @@ const ProductListingPage = () => {
         }
 
         // Gọi API để lấy danh sách sản phẩm
-        const response = await axios.get("https://localhost:44308/api/Customer/all-products", {
+        const response = await axios.get(`${API_BASE_URL}Customer/all-products`, {
           params,
           withCredentials: true
         });

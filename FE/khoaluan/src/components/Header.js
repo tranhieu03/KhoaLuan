@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ShoppingCart, Bell, User, LogOut, ChevronDown, Sun, Moon } from "lucide-react";
 import axios from "axios";
+import API_BASE_URL from "../config";
 
 const Header = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -29,7 +30,7 @@ const Header = () => {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        const response = await axios.get("https://localhost:44308/api/Auth/status", {
+        const response = await axios.get(`${API_BASE_URL}/Auth/status`, {
           withCredentials: true
         });
         
@@ -66,7 +67,7 @@ const Header = () => {
   // Sửa hàm fetchNotifications để thêm withCredentials
   const fetchNotifications = async () => {
     try {
-      const response = await axios.get("https://localhost:44308/api/Notification/get-notifications", {
+      const response = await axios.get(`${API_BASE_URL}/Notification/get-notifications`, {
         withCredentials: true
       });
       setNotifications(response.data);
@@ -78,7 +79,7 @@ const Header = () => {
 
   const markAllAsRead = async () => {
     try {
-      await axios.put("https://localhost:44308/api/Notification/mark-all-read");
+      await axios.put(`${API_BASE_URL}/Notification/mark-all-read`);
       setNotifications(notifications.map(notif => ({ ...notif, isRead: true })));
       setUnreadCount(0);
     } catch (error) {
@@ -89,7 +90,7 @@ const Header = () => {
   const handleNotificationsOpen = async () => {
     if (!isNotificationsOpen && unreadCount > 0) {
       try {
-        await axios.post("https://localhost:44308/api/Notification/mark-as-read");
+        await axios.post(`${API_BASE_URL}/Notification/mark-as-read`);
         fetchNotifications();
       } catch (error) {
         console.error("Lỗi khi đánh dấu đã đọc:", error);
@@ -100,7 +101,7 @@ const Header = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post("https://localhost:44308/api/Auth/logout", {}, {
+      await axios.post(`${API_BASE_URL}/Auth/logout`, {}, {
         withCredentials: true
       });
       setIsLoggedIn(false);

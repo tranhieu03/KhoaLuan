@@ -3,6 +3,7 @@ import axios from 'axios';
 import MapComponent from './MapComponent'; // Import MapComponent
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import API_BASE_URL from "../config";
 
 // Sửa lỗi biểu tượng marker mặc định của Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -138,7 +139,7 @@ const CreateRestaurant = () => {
 
     try {
       setLoading(true);
-      const response = await axios.post('https://localhost:44308/api/Restaurant/create', formData, {
+      const response = await axios.post(`${API_BASE_URL}//Restaurant/create`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

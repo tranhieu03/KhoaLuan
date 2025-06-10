@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { MapPin, Truck, Clock, Map, Package, Store, Home, Info, X, RefreshCw } from 'lucide-react';
 import LeafletMap from './LeafletMap';
+import API_BASE_URL from "../config";
 
 const OrderTracking = ({ orderId, deliveryAddress }) => {
   const [trackingData, setTrackingData] = useState({
@@ -17,7 +18,7 @@ const OrderTracking = ({ orderId, deliveryAddress }) => {
     try {
       setLoading(true);
       const response = await axios.get(
-        `https://localhost:44308/api/Order/delivery-tracking/${orderId}`,
+        `${API_BASE_URL}/Order/delivery-tracking/${orderId}`,
         { 
           withCredentials: true,
           timeout: 10000

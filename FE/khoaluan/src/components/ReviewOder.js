@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
 import Header from './Header';
+import API_BASE_URL from "../config";
 
-const API_ORDERS = "https://localhost:44308/api/Review";
+
+const API_ORDERS = `${API_BASE_URL}/Review`;
 
 function ReviewOrder() {
   const { orderId } = useParams();

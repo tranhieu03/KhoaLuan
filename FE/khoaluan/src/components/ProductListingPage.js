@@ -7,6 +7,7 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
 import "../index.css";
 import Header from './Header'
+import API_BASE_URL from "../config";
 
 const ProductListingPage = () => {
   const navigate = useNavigate();
@@ -59,7 +60,7 @@ const ProductListingPage = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await axios.get("https://localhost:44308/api/Product/food-categories");
+        const response = await axios.get(`${API_BASE_URL}/Product/food-categories`);
         setFoodCategories(response.data);
       } catch (err) {
         console.error("Failed to fetch categories:", err);
@@ -92,7 +93,7 @@ const ProductListingPage = () => {
           params.longitude = userLocation.longitude;
         }
 
-        const response = await axios.get("https://localhost:44308/api/Customer/all-products", {
+        const response = await axios.get(`${API_BASE_URL}/Customer/all-products`, {
           params,
           withCredentials: true
         });

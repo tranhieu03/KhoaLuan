@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, Edit, Save, X } from 'lucide-react';
+import API_BASE_URL from "../config";
 
 const DeliveryPersonProfile = () => {
   const [profile, setProfile] = useState(null);
@@ -22,7 +23,7 @@ const DeliveryPersonProfile = () => {
     setIsLoading(true);
     try {
       // Updated API path based on your controller routes
-      const response = await fetch('https://localhost:44308/api/Account/profile', {
+      const response = await fetch(`${API_BASE_URL}/Account/profile`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -80,7 +81,7 @@ const DeliveryPersonProfile = () => {
     setIsLoading(true);
     try {
       // Updated API path based on your controller routes
-      const response = await fetch('https://localhost:44308/api/Account/update-profile', {
+      const response = await fetch(`${API_BASE_URL}/Account/update-profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +144,7 @@ const DeliveryPersonProfile = () => {
   // Check authentication status
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('https://localhost:44308/api/Auth/status', {
+      const response = await fetch(`${API_BASE_URL}/Auth/status`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

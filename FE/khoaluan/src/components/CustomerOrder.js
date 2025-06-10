@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import axios from "axios";
 import Header from "./Header";
+import API_BASE_URL from "../config";
 
-const API_ORDERS = "https://localhost:44308/api/Customer";
-const API_ORDERS2 = "https://localhost:44308/api/Order";
+const API_ORDERS = `${API_BASE_URL}/Customer`;
+const API_ORDERS2 = `${API_BASE_URL}/Order`;
 
 function MyOrders() {
   const navigate = useNavigate();

@@ -4,8 +4,9 @@ import { PlusCircle, Edit, Trash2, Image as ImageIcon, Loader2, RotateCw, Eye, E
 import RestaurantHeader from "./RestaurantHeader";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import API_BASE_URL from "../config";
 
-const API_ORDERS2 = "https://localhost:44308";
+const API_ORDERS2 = API_BASE_URL || "https://localhost:44308/api";
 const SellerDashboard = () => {
   const [products, setProducts] = useState([]);
   const [InactiveProducts, setInactiveProducts] = useState([]);
@@ -34,7 +35,7 @@ const SellerDashboard = () => {
   const checkUserRestaurant = async () => {
     setIsCheckingRestaurant(true);
     try {
-      const res = await axios.get(`${API_ORDERS2}/api/Restaurant/has-restaurant`, { 
+      const res = await axios.get(`${API_ORDERS2}/Restaurant/has-restaurant`, { 
         withCredentials: true 
       });
       
@@ -59,7 +60,7 @@ const SellerDashboard = () => {
 
   const fetchCategories = async () => {
     try {
-      const res = await axios.get(`${API_ORDERS2}/api/Product/food-categories`);
+      const res = await axios.get(`${API_ORDERS2}/Product/food-categories`);
       setCategories(res.data);
     } catch (error) {
       toast.error("Lỗi khi tải danh mục sản phẩm");
@@ -69,8 +70,8 @@ const SellerDashboard = () => {
   const fetchProducts = async () => {
     setIsLoading(true);
     try {
-      const activeRes = await axios.get(`${API_ORDERS2}/api/Product/listsanphamcuahang`, { withCredentials: true });
-      const InactiveRes = await axios.get(`${API_ORDERS2}/api/Product/listsanphamdaxoa`, { withCredentials: true });
+      const activeRes = await axios.get(`${API_ORDERS2}/Product/listsanphamcuahang`, { withCredentials: true });
+      const InactiveRes = await axios.get(`${API_ORDERS2}/Product/listsanphamdaxoa`, { withCredentials: true });
       
       setProducts(activeRes.data);
       setInactiveProducts(InactiveRes.data);
@@ -145,7 +146,7 @@ const SellerDashboard = () => {
     formData.append("ImageFile", selectedImage);
   
     try {
-      await axios.post(`${API_ORDERS2}/api/Product/create`, formData, {
+      await axios.post(`${API_ORDERS2}/Product/create`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         withCredentials: true
       });
@@ -167,7 +168,7 @@ const SellerDashboard = () => {
     setIsLoading(true);
     try {
       const endpoint = action === "delete" ? "delete" : "restore";
-      await axios.put(`${API_ORDERS2}/api/Product/${endpoint}/${productId}`, {}, { withCredentials: true });
+      await axios.put(`${API_ORDERS2}/Product/${endpoint}/${productId}`, {}, { withCredentials: true });
       
       toast.success(`Sản phẩm đã được ${action === "delete" ? "xóa" : "khôi phục"} thành công`);
       fetchProducts();

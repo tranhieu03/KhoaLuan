@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 import Header from "./Header";
+import API_BASE_URL from "../config";
+
 export default function RestaurantProductsPage() {
   const { restaurantId } = useParams();
   const [restaurant, setRestaurant] = useState(null);

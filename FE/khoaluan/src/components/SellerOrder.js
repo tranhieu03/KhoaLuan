@@ -3,9 +3,11 @@ import axios from "axios";
 import { CheckCircle, Clock, Truck, XCircle, AlertCircle } from "lucide-react";
 import RestaurantHeader from "./RestaurantHeader";
 
+import API_BASE_URL from "../config";
+
 // Tạo axios instance với cấu hình sẵn
 const apiClient = axios.create({
-  baseURL: "https://localhost:44308/api",
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json"

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Info, MapPin, AlertTriangle } from 'lucide-react';
+import API_BASE_URL from "../config";
 
 const GoongMap = ({ driverLocation, restaurantLocation, destination }) => {
   const mapContainerRef = useRef(null);

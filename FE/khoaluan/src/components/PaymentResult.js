@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import API_BASE_URL from "../config";
 
 export default function PaymentResult() {
   const [paymentInfo, setPaymentInfo] = useState({

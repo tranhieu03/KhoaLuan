@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import AdminHeader from './AdminHeader';
+import API_BASE_URL from "../config";
 import { 
   Users, 
   Trash2, 
@@ -30,7 +31,7 @@ const AdminDashboard = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://localhost:44308/api/Admin/users', {
+      const response = await axios.get(`${API_BASE_URL}/Admin/users`, {
         withCredentials: true
       });
       setUsers(response.data);
@@ -60,7 +61,7 @@ const AdminDashboard = () => {
     if (!window.confirm('Are you sure you want to deactivate this user?')) return;
     
     try {
-      await axios.delete(`https://localhost:44308/api/Admin/delete/${userId}`, {
+      await axios.delete(`${API_BASE_URL}/Admin/delete/${userId}`, {
         withCredentials: true
       });
       

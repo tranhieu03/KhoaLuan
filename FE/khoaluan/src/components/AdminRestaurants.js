@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import AdminHeader from './AdminHeader';
+import API_BASE_URL from "../config";
 import { 
   Loader2,
   Shield,
@@ -40,7 +41,7 @@ const RestaurantManagement = () => {
   const fetchRestaurants = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://localhost:44308/api/Admin/restaurants', {
+      const response = await axios.get(`${API_BASE_URL}/Admin/restaurants`, {
         withCredentials: true
       });
       setRestaurants(response.data);
@@ -94,7 +95,7 @@ const RestaurantManagement = () => {
   const handleApproveRestaurant = async (restaurantId) => {
     try {
       setLoading(true);
-      await axios.post(`https://localhost:44308/api/Admin/approve/${restaurantId}`, {}, {
+      await axios.post(`${API_BASE_URL}/Admin/approve/${restaurantId}`, {}, {
         withCredentials: true
       });
       toast.success('Restaurant approved successfully');
@@ -115,7 +116,7 @@ const RestaurantManagement = () => {
     
     try {
       setLoading(true);
-      await axios.post(`https://localhost:44308/api/Admin/reject/${selectedRestaurant.restaurantId}`, {
+      await axios.post(`${API_BASE_URL}/Admin/reject/${selectedRestaurant.restaurantId}`, {
         reason: rejectionReason
       }, {
         withCredentials: true

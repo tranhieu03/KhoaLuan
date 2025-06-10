@@ -5,6 +5,7 @@ import axios from "axios";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
+import API_BASE_URL from "../config";
 
 const RestaurantProductsPage = () => {
   const { restaurantId } = useParams();
@@ -18,7 +19,7 @@ const RestaurantProductsPage = () => {
       try {
         setLoading(true);
         const response = await axios.get(
-          `https://localhost:44308/api/Customer/products-by-restaurant/${restaurantId}`,
+          `${API_BASE_URL}/Customer/products-by-restaurant/${restaurantId}`,
           { withCredentials: true }
         );
         setProducts(response.data);
