@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import API_BASE_URL from "../config";
 
-const API_ORDERS2 = API_BASE_URL || "https://localhost:44308/api";
+const API_ORDERS2 = API_BASE_URL;
 const SellerDashboard = () => {
   const [products, setProducts] = useState([]);
   const [InactiveProducts, setInactiveProducts] = useState([]);

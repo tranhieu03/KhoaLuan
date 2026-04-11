@@ -87,7 +87,7 @@ const OrderPage = () => {
     else {
       return (
         <img 
-          src={`https://localhost:44308/${item.imageUrl}`} 
+          src={`${API_BASE_URL}/${item.imageUrl.replace(/^\/+/, '')}`} 
           alt={item.name} 
           className="w-16 h-16 object-cover rounded"
         />

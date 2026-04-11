@@ -68,7 +68,7 @@ const CreateRestaurant = () => {
       
       // Cách 1: Sử dụng API thông qua backend của bạn (ưu tiên)
       try {
-        const response = await axios.get(`https://localhost:44308/api/Goong/get-coordinates?address=${encodeURIComponent(restaurant.address)}`);
+        const response = await axios.get(`${API_BASE_URL}/Goong/get-coordinates?address=${encodeURIComponent(restaurant.address)}`);
         if (response.data) {
           setPosition({ lat: response.data.latitude, lon: response.data.longitude });
           setMessage({ text: 'Đã tìm thấy vị trí', type: 'success' });
@@ -139,7 +139,7 @@ const CreateRestaurant = () => {
 
     try {
       setLoading(true);
-      const response = await axios.post(`${API_BASE_URL}//Restaurant/create`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/Restaurant/create`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

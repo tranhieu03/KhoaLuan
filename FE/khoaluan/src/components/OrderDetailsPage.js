@@ -196,7 +196,7 @@ const OrderDetailsPage = () => {
                     <div className="flex-shrink-0 w-24 h-24">
                       {item.productImage ? (
   <img 
-    src={item.productImage.startsWith('http') ? item.productImage : `https://localhost:44308/${item.productImage}`} 
+    src={item.productImage.startsWith('http') ? item.productImage : `${API_BASE_URL}/${item.productImage.replace(/^\/+/, '')}`} 
     alt={item.productName}
     className="w-full h-full object-cover rounded-md"
     onError={(e) => {
