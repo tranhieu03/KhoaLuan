@@ -47,7 +47,7 @@ function Cart() {
     // For local uploads, prepend the base URL and ensure correct path
     // Remove any leading slashes to avoid double slashes in URL
     const cleanedPath = imageUrl.replace(/^\/+/, '');
-    return `https://localhost:44308/${cleanedPath}`;
+    return `${API_BASE_URL}/${cleanedPath}`;
   };
   const toggleSelectItem = (cartItemId) => {
     setSelectedItems(prev =>

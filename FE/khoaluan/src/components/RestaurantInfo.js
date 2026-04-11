@@ -282,7 +282,7 @@ const RestaurantInfo = () => {
                     ) : restaurant.restaurantImage ? (
                       <div className="relative">
                         <img 
-                          src={`https://localhost:44308${restaurant.restaurantImage}`} 
+                          src={`${API_BASE_URL}${restaurant.restaurantImage}`} 
                           alt={restaurant.name} 
                           className="h-32 object-cover rounded"
                         />
@@ -314,7 +314,7 @@ const RestaurantInfo = () => {
                 <div className="flex items-start mb-6">
                   {restaurant.restaurantImage ? (
                     <img 
-                      src={`https://localhost:44308${restaurant.restaurantImage}`} 
+                      src={`${API_BASE_URL}${restaurant.restaurantImage}`} 
                       alt={restaurant.name} 
                       className="h-32 w-32 object-cover rounded-lg mr-4"
                     />

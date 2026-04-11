@@ -1,53 +1,43 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShoppingCart, Bell, User, LogOut, ChevronDown, Sun, Moon } from "lucide-react";
+import { ShoppingCart, Bell, User, LogOut, ChevronDown, Sun, Moon, Package } from "lucide-react";
 import axios from "axios";
 import API_BASE_URL from "../config";
+import { useAuth } from "../contexts/AuthContext";
 
 const Header = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userInfo, setUserInfo] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const navigate = useNavigate();
   const notificationRef = useRef(null);
   const userDropdownRef = useRef(null);
+  
+  const { user, isAuthenticated, logout } = useAuth();
 
-  // Kiểm tra theme khi component mount
+  // Kiem tra theme khi component mount
   useEffect(() => {
-    const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    setIsDarkMode(darkModeMediaQuery.matches);
-    
-    darkModeMediaQuery.addEventListener('change', (e) => {
-      setIsDarkMode(e.matches);
-    });
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
   }, []);
 
-  // Kiểm tra trạng thái đăng nhập
+  // Fetch notifications khi dang nhap
   useEffect(() => {
-    const checkLoginStatus = async () => {
-      try {
-        const response = await axios.get(`${API_BASE_URL}/Auth/status`, {
-          withCredentials: true
-        });
-        
-        if (response.data.userId) {
-          setIsLoggedIn(true);
-          setUserInfo(response.data);
-          fetchNotifications();
-        }
-      } catch (error) {
-        console.error("Lỗi khi kiểm tra trạng thái đăng nhập:", error);
+    if (isAuthenticated) {
+      fetchNotifications();
+      if (user?.role === 'customer') {
+        fetchCartCount();
       }
-    };
+    }
+  }, [isAuthenticated, user]);
 
-    checkLoginStatus();
-  }, []);
-
-  // Đóng dropdown khi click bên ngoài
+  // Dong dropdown khi click ben ngoai
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
@@ -64,7 +54,6 @@ const Header = () => {
     };
   }, []);
 
-  // Sửa hàm fetchNotifications để thêm withCredentials
   const fetchNotifications = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/Notification/get-notifications`, {
@@ -73,48 +62,57 @@ const Header = () => {
       setNotifications(response.data);
       setUnreadCount(response.data.filter(notification => !notification.isRead).length);
     } catch (error) {
-      console.error("Lỗi khi tải thông báo:", error);
+      console.error("Loi khi tai thong bao:", error);
+    }
+  };
+
+  const fetchCartCount = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/Cart/Cart_items`, {
+        withCredentials: true
+      });
+      setCartCount(response.data.items?.length || 0);
+    } catch (error) {
+      console.error("Loi khi tai so luong gio hang:", error);
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      await axios.put(`${API_BASE_URL}/Notification/mark-all-read`);
+      await axios.put(`${API_BASE_URL}/Notification/mark-all-read`, {}, {
+        withCredentials: true
+      });
       setNotifications(notifications.map(notif => ({ ...notif, isRead: true })));
       setUnreadCount(0);
     } catch (error) {
-      console.error("Lỗi khi đánh dấu đã đọc:", error);
+      console.error("Loi khi danh dau da doc:", error);
     }
   };
 
   const handleNotificationsOpen = async () => {
     if (!isNotificationsOpen && unreadCount > 0) {
       try {
-        await axios.post(`${API_BASE_URL}/Notification/mark-as-read`);
+        await axios.post(`${API_BASE_URL}/Notification/mark-as-read`, {}, {
+          withCredentials: true
+        });
         fetchNotifications();
       } catch (error) {
-        console.error("Lỗi khi đánh dấu đã đọc:", error);
+        console.error("Loi khi danh dau da doc:", error);
       }
     }
     setIsNotificationsOpen(!isNotificationsOpen);
   };
 
   const handleLogout = async () => {
-    try {
-      await axios.post(`${API_BASE_URL}/Auth/logout`, {}, {
-        withCredentials: true
-      });
-      setIsLoggedIn(false);
-      setUserInfo(null);
-      navigate("/");
-    } catch (error) {
-      console.error("Lỗi khi đăng xuất:", error);
-    }
+    await logout();
+    navigate("/");
   };
 
   const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark', !isDarkMode);
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    document.documentElement.classList.toggle('dark', newMode);
+    localStorage.setItem('theme', newMode ? 'dark' : 'light');
   };
 
   const formatTime = (dateString) => {
@@ -128,42 +126,65 @@ const Header = () => {
     }).format(date);
   };
 
-  // Lấy link trang quản lý dựa trên role
+  // Lay link trang quan ly dua tren role
   const getDashboardLink = () => {
-    if (!userInfo || !userInfo.role) return "/profile";
+    if (!user?.role) return "/profile";
     
-    switch (userInfo.role) {
-      case "Seller":
+    switch (user.role) {
+      case "seller":
         return "/restaurant/dashboard";
-      case "DeliveryPerson":
+      case "deliveryperson":
         return "/delivery/dashboard";
+      case "admin":
+        return "/admin/dashboard";
       default:
         return "/profile";
     }
   };
 
-  // Lấy tên hiển thị cho trang quản lý dựa trên role
+  // Lay ten hien thi cho trang quan ly dua tren role
   const getDashboardName = () => {
-    if (!userInfo || !userInfo.role) return "Thông tin cá nhân";
+    if (!user?.role) return "Thong tin ca nhan";
     
-    switch (userInfo.role) {
+    switch (user.role) {
       case "seller":
-        return "Quản lý bán hàng";
-      case "DeliveryPerson":
-        return "Quản lý giao hàng";
+        return "Quan ly ban hang";
+      case "deliveryperson":
+        return "Quan ly giao hang";
+      case "admin":
+        return "Quan tri he thong";
       default:
-        return "Thông tin cá nhân";
+        return "Thong tin ca nhan";
     }
   };
 
+  // Lay icon cho role
+  const getRoleIcon = () => {
+    if (!user?.role) return <User className="h-4 w-4 mr-2" />;
+    
+    switch (user.role) {
+      case "seller":
+        return <span className="mr-2">🏪</span>;
+      case "deliveryperson":
+        return <span className="mr-2">🚚</span>;
+      case "admin":
+        return <span className="mr-2">⚙️</span>;
+      default:
+        return <User className="h-4 w-4 mr-2" />;
+    }
+  };
+
+  // Kiem tra xem user co phai la customer khong
+  const isCustomer = user?.role === 'customer' || !user?.role;
+
   return (
-    <header className={`bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-lg sticky top-0 z-50 transition-colors duration-300 ${isDarkMode ? 'dark:from-gray-800 dark:via-gray-700 dark:to-gray-600' : ''}`}>
+    <header className={`bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 shadow-lg sticky top-0 z-50 transition-colors duration-300 ${isDarkMode ? 'dark:from-gray-800 dark:via-gray-700 dark:to-gray-600' : ''}`}>
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
-          {/* Logo với animation */}
-          <Link to="/all" className="flex items-center space-x-2 group">
-            <div className="bg-white p-2 rounded-full group-hover:rotate-12 transition-transform duration-300">
-              <div className="w-8 h-8 bg-gradient-to-r from-pink-500 to-orange-500 rounded-full flex items-center justify-center text-white font-bold">
+          {/* Logo voi animation */}
+          <Link to={isAuthenticated ? (isCustomer ? "/all" : getDashboardLink()) : "/"} className="flex items-center space-x-2 group">
+            <div className="bg-white p-2 rounded-full group-hover:rotate-12 transition-transform duration-300 shadow-md">
+              <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
                 F
               </div>
             </div>
@@ -173,54 +194,58 @@ const Header = () => {
           </Link>
 
           {/* Navigation */}
-          <div className="flex items-center space-x-6">
-            {isLoggedIn ? (
+          <div className="flex items-center space-x-4">
+            {isAuthenticated ? (
               <>
-                {/* Thông báo */}
+                {/* Thong bao */}
                 <div className="relative" ref={notificationRef}>
                   <button 
                     className="relative p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
                     onClick={handleNotificationsOpen}
+                    aria-label="Thong bao"
                   >
                     <Bell className="h-5 w-5 text-white" />
                     {unreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                      <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
                         {unreadCount > 9 ? '9+' : unreadCount}
                       </span>
                     )}
                   </button>
                   
-                  {/* Dropdown thông báo */}
+                  {/* Dropdown thong bao */}
                   {isNotificationsOpen && (
                     <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden z-50 border border-gray-200 dark:border-gray-600">
                       <div className="p-3 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
-                        <h3 className="font-semibold text-gray-800 dark:text-white">Thông báo</h3>
-                        <button 
-                          className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-                          onClick={markAllAsRead}
-                        >
-                          Đánh dấu đã đọc
-                        </button>
+                        <h3 className="font-semibold text-gray-800 dark:text-white">Thong bao</h3>
+                        {unreadCount > 0 && (
+                          <button 
+                            className="text-sm text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 font-medium"
+                            onClick={markAllAsRead}
+                          >
+                            Danh dau da doc
+                          </button>
+                        )}
                       </div>
                       <div className="max-h-96 overflow-y-auto">
                         {notifications.length > 0 ? (
-                          notifications.map((notification) => (
+                          notifications.slice(0, 10).map((notification) => (
                             <div 
                               key={notification.notificationId} 
-                              className={`p-3 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 ${
-                                !notification.isRead ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                              className={`p-3 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors duration-150 cursor-pointer ${
+                                !notification.isRead ? 'bg-orange-50 dark:bg-orange-900/30' : ''
                               }`}
                             >
-                              <div className="font-medium text-gray-800 dark:text-white">{notification.title}</div>
-                              <div className="text-sm text-gray-600 dark:text-gray-300">{notification.message}</div>
+                              <div className="font-medium text-gray-800 dark:text-white text-sm">{notification.title}</div>
+                              <div className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">{notification.message}</div>
                               <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 {formatTime(notification.createdAt)}
                               </div>
                             </div>
                           ))
                         ) : (
-                          <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                            Không có thông báo
+                          <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                            <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p>Khong co thong bao</p>
                           </div>
                         )}
                       </div>
@@ -228,45 +253,27 @@ const Header = () => {
                   )}
                 </div>
 
-                {/* Giỏ hàng - chỉ hiển thị cho khách hàng thông thường */}
-                {(!userInfo?.role || userInfo.role === "Customer") && (
+                {/* Gio hang - chi hien thi cho khach hang */}
+                {isCustomer && (
                   <Link 
                     to="/cart" 
                     className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
+                    aria-label="Gio hang"
                   >
                     <ShoppingCart className="h-5 w-5 text-white" />
-                    <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      3
-                    </span>
+                    {cartCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {cartCount > 9 ? '9+' : cartCount}
+                      </span>
+                    )}
                   </Link>
                 )}
- {(!userInfo?.role || userInfo.role === "seller") && (
-                  <Link 
-                    to="/cart" 
-                    className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
-                  >
-                    <ShoppingCart className="h-5 w-5 text-white" />
-                    <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      3
-                    </span>
-                  </Link>
-                )}
-                 {(!userInfo?.role || userInfo.role === "DeliveryPerson") && (
-                  <Link 
-                    to="/cart" 
-                    className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200 relative"
-                  >
-                    <ShoppingCart className="h-5 w-5 text-white" />
-                    <span className="absolute -top-1 -right-1 bg-yellow-400 text-gray-800 text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      3
-                    </span>
-                  </Link>
-                )}
+
                 {/* Dark mode toggle */}
                 <button
                   onClick={toggleDarkMode}
                   className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
-                  aria-label="Toggle dark mode"
+                  aria-label="Chuyen doi che do sang/toi"
                 >
                   {isDarkMode ? (
                     <Sun className="h-5 w-5 text-yellow-300" />
@@ -278,15 +285,15 @@ const Header = () => {
                 {/* User dropdown */}
                 <div className="relative" ref={userDropdownRef}>
                   <button 
-                    className="flex items-center space-x-1 p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
+                    className="flex items-center space-x-2 p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
                     onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
                   >
-                    {userInfo?.fullName && (
-                      <span className="hidden md:inline text-sm font-medium text-white">
-                        {userInfo.fullName}
+                    {user?.fullName && (
+                      <span className="hidden md:inline text-sm font-medium text-white max-w-32 truncate">
+                        {user.fullName}
                       </span>
                     )}
-                    <div className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-white">
+                    <div className="w-8 h-8 rounded-full bg-white/30 flex items-center justify-center text-white border-2 border-white/50">
                       <User className="h-4 w-4" />
                     </div>
                     <ChevronDown className={`h-4 w-4 text-white transition-transform duration-200 ${
@@ -294,41 +301,83 @@ const Header = () => {
                     }`} />
                   </button>
                   
-                  {/* Dropdown menu với các tùy chọn dựa trên role */}
+                  {/* Dropdown menu */}
                   {isUserDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
+                    <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl py-2 z-50 border border-gray-200 dark:border-gray-700">
+                      {/* User info header */}
+                      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                        <p className="font-medium text-gray-800 dark:text-white truncate">{user?.fullName}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                      </div>
+                      
                       <Link 
                         to={getDashboardLink()}
-                        className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                        className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                        onClick={() => setIsUserDropdownOpen(false)}
                       >
-                        {userInfo?.role === "seller" ? "🏪" : userInfo?.role === "DeliveryPerson" ? "🚚" : "👤"} {getDashboardName()}
+                        {getRoleIcon()} {getDashboardName()}
                       </Link>
                       
-                      {/* Hiển thị link đơn hàng chỉ cho khách hàng thông thường */}
-                      {(!userInfo?.role || userInfo.role === "Customer") && (
+                      {/* Hien thi link don hang chi cho khach hang */}
+                      {isCustomer && (
                         <Link 
                           to="/customer/order" 
-                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                          className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                          onClick={() => setIsUserDropdownOpen(false)}
                         >
-                          🛒 Đơn hàng của tôi
+                          <Package className="h-4 w-4 mr-2" /> Don hang cua toi
                         </Link>
                       )}
-                      {(!userInfo?.role || userInfo.role === "seller") && (
-                        <Link 
-                          to="/restaurant/dashboard" 
-                          className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
-                        >
-                          quản lý bán hàng
-                        </Link>
+
+                      {/* Hien thi link cho seller */}
+                      {user?.role === 'seller' && (
+                        <>
+                          <Link 
+                            to="/seller/order" 
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                            onClick={() => setIsUserDropdownOpen(false)}
+                          >
+                            <Package className="h-4 w-4 mr-2" /> Quan ly don hang
+                          </Link>
+                          <Link 
+                            to="/seller/renue" 
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                            onClick={() => setIsUserDropdownOpen(false)}
+                          >
+                            <span className="mr-2">📊</span> Bao cao doanh thu
+                          </Link>
+                        </>
+                      )}
+
+                      {/* Hien thi link cho delivery */}
+                      {user?.role === 'deliveryperson' && (
+                        <>
+                          <Link 
+                            to="/delivery/order" 
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                            onClick={() => setIsUserDropdownOpen(false)}
+                          >
+                            <Package className="h-4 w-4 mr-2" /> Don hang giao
+                          </Link>
+                          <Link 
+                            to="/delivery/renue" 
+                            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150"
+                            onClick={() => setIsUserDropdownOpen(false)}
+                          >
+                            <span className="mr-2">📊</span> Thu nhap
+                          </Link>
+                        </>
                       )}
                       
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150 flex items-center"
-                      >
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Đăng xuất
-                      </button>
+                      <div className="border-t border-gray-200 dark:border-gray-700 mt-1 pt-1">
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-150"
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Dang xuat
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -338,7 +387,7 @@ const Header = () => {
                 <button
                   onClick={toggleDarkMode}
                   className="p-2 rounded-full hover:bg-white/20 transition-colors duration-200"
-                  aria-label="Toggle dark mode"
+                  aria-label="Chuyen doi che do sang/toi"
                 >
                   {isDarkMode ? (
                     <Sun className="h-5 w-5 text-yellow-300" />
@@ -348,15 +397,15 @@ const Header = () => {
                 </button>
                 <Link 
                   to="/" 
-                  className="px-4 py-2 border-2 border-white text-white rounded-lg hover:bg-white/20 transition-colors duration-300 font-medium"
+                  className="px-4 py-2 border-2 border-white text-white rounded-lg hover:bg-white/20 transition-all duration-300 font-medium"
                 >
-                  Đăng nhập
+                  Dang nhap
                 </Link>
                 <Link 
                   to="/register" 
-                  className="px-4 py-2 bg-white text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors duration-300 font-medium shadow-md hover:shadow-lg"
+                  className="px-4 py-2 bg-white text-orange-600 rounded-lg hover:bg-gray-100 transition-all duration-300 font-medium shadow-md hover:shadow-lg"
                 >
-                  Đăng ký
+                  Dang ky
                 </Link>
               </div>
             )}

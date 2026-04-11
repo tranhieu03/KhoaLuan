@@ -19,7 +19,7 @@ const DeliveryPersonDashboard = () => {
     const createHubConnection = async () => {
       try {
         const connection = new signalR.HubConnectionBuilder()
-          .withUrl("https://localhost:44308/notificationHub", {
+          .withUrl(`${API_BASE_URL}/notificationHub`, {
             withCredentials: true,
             skipNegotiation: false,
             transport: signalR.HttpTransportType.WebSockets

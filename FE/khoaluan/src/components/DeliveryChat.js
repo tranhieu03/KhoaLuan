@@ -30,7 +30,7 @@ const DeliveryChat = ({ myOrders }) => {
     const createHubConnection = async () => {
       try {
         const connection = new HubConnectionBuilder()
-          .withUrl("https://localhost:44308/chatHub")
+          .withUrl(`${API_BASE_URL}/chatHub`)
           .configureLogging(LogLevel.Information)
           .build();
 

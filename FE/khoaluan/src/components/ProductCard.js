@@ -21,7 +21,9 @@ const ProductCard = ({ product, onViewDetail, onCartUpdate }) => {
       return imageUrl;
     } else {
       // For local uploads, prepend the base URL if needed
-      return `${API_BASE_URL}}${imageUrl}`;
+      // Remove leading slash to avoid double slashes
+      const cleanedPath = imageUrl.replace(/^\/+/, '');
+      return `${API_BASE_URL}/${cleanedPath}`;
     }
   };
 
@@ -45,7 +47,7 @@ const ProductCard = ({ product, onViewDetail, onCartUpdate }) => {
     try {
       setIsAdding(true);
       await axios.post(
-        `${API_BASE_URL}//Cart/Cart_add`,
+        `${API_BASE_URL}/Cart/Cart_add`,
         { 
           ProductId: product.productId, 
           Quantity: 1 
